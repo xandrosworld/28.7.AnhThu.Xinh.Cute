@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thêm hàng hóa mới – DNP Logistics</title>
+<link rel="stylesheet" href="02-them-hang-hoa.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🚚</div>
+      <div><div class="logo-text">DNP Logistics</div><div class="logo-sub">QUẢN LÝ KHO HÀNG</div></div>
+    </div>
+    <div class="sidebar-section">CHÍNH</div>
+    <nav>
+      <button class="nav-item">🏠 Trang chủ</button>
+      <button class="nav-item">📥 Quản lý nhập kho</button>
+      <button class="nav-item">📤 Quản lý xuất kho</button>
+      <button class="nav-item active">📦 Hàng hóa</button>
+      <button class="nav-item">🏭 Quản lý tồn kho</button>
+      <button class="nav-item">🏷️ Danh mục</button>
+    </nav>
+    <div class="sidebar-section">HỆ THỐNG</div>
+    <nav>
+      <button class="nav-item">👥 Quản lý người dùng</button>
+      <button class="nav-item">📊 Báo cáo &amp; Thống kê</button>
+      <button class="nav-item">⚙️ Cài đặt hệ thống</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row"><div class="avatar-sm">NV</div><div><div class="user-name">Nguyễn Văn A</div><div class="user-role">Quản trị viên</div></div></div>
+      <button class="logout">↪ Đăng xuất</button>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="search-wrap"><span class="ico-search">🔍</span><input type="text" placeholder="Tìm kiếm..."></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="icon-btn">🔔<span class="badge">3</span></div>
+        <div class="divider-v"></div>
+        <div class="user-chip"><div class="avatar-xs">AD</div><div><div class="chip-name">Admin DNP</div><div class="chip-role">Quản trị viên</div></div><span>▾</span></div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="breadcrumb">
+        <a>Hàng hóa</a><span>›</span><span>Thêm hàng hóa mới</span>
+      </div>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Thêm hàng hóa mới</div>
+          <div class="page-sub">Nhập thông tin chi tiết để thêm sản phẩm vào hệ thống</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn">Hủy bỏ</button>
+          <button class="btn btn-primary">💾 Lưu hàng hóa</button>
+        </div>
+      </div>
+      <div class="form-grid">
+        <!-- LEFT -->
+        <div>
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-title">📋 Thông tin cơ bản</div>
+            <div class="form-col">
+              <label>Tên hàng hóa <span class="req">*</span></label>
+              <input type="text" placeholder="Nhập tên sản phẩm...">
+            </div>
+            <div class="form-row">
+              <div class="form-col" style="margin-bottom:0">
+                <label>Mã sản phẩm (SKU) <span class="req">*</span></label>
+                <input type="text" placeholder="VD: ELC-2023-X1">
+              </div>
+              <div class="form-col" style="margin-bottom:0">
+                <label>Barcode</label>
+                <input type="text" placeholder="VD: 8850003172551">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:14px">
+              <div class="form-col" style="margin-bottom:0">
+                <label>Danh mục <span class="req">*</span></label>
+                <select><option>-- Chọn danh mục --</option><option>Điện tử</option><option>Gia dụng</option><option>Nội thất</option></select>
+              </div>
+              <div class="form-col" style="margin-bottom:0">
+                <label>Đơn vị tính <span class="req">*</span></label>
+                <select><option>-- Chọn ĐVT --</option><option>Cái</option><option>Bộ</option><option>Thùng</option><option>Kg</option></select>
+              </div>
+            </div>
+            <div class="form-col" style="margin-top:14px">
+              <label>Mô tả</label>
+              <textarea placeholder="Nhập mô tả sản phẩm..."></textarea>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">📊 Thông tin chi tiết</div>
+            <div class="form-row">
+              <div class="form-col" style="margin-bottom:0">
+                <label>Số lượng ban đầu</label>
+                <input type="number" placeholder="0" value="0">
+              </div>
+              <div class="form-col" style="margin-bottom:0">
+                <label>Giá nhập (VND)</label>
+                <input type="number" placeholder="0">
+              </div>
+            </div>
+            <div class="form-row" style="margin-top:14px">
+              <div class="form-col" style="margin-bottom:0">
+                <label>Tồn kho tối thiểu</label>
+                <input type="number" placeholder="0" value="10">
+              </div>
+              <div class="form-col" style="margin-bottom:0">
+                <label>Tồn kho tối đa</label>
+                <input type="number" placeholder="0" value="500">
+              </div>
+            </div>
+            <div class="form-col" style="margin-top:14px">
+              <label>Vị trí kho</label>
+              <input type="text" placeholder="VD: A-12-04">
+            </div>
+          </div>
+        </div>
+        <!-- RIGHT -->
+        <div>
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-title">🖼️ Hình ảnh sản phẩm</div>
+            <div class="upload-box">
+              <div class="upload-icon">📁</div>
+              <div class="upload-label">Kéo thả hoặc click để tải ảnh</div>
+              <div class="upload-hint">PNG, JPG tối đa 10MB</div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-title">🔘 Trạng thái</div>
+            <div class="status-options">
+              <label class="status-opt active-opt"><input type="radio" name="st" checked> ✅ Còn hàng</label>
+              <label class="status-opt"><input type="radio" name="st"> ⚠️ Sắp hết</label>
+              <label class="status-opt"><input type="radio" name="st"> ❌ Hết hàng</label>
+              <label class="status-opt"><input type="radio" name="st"> 🚫 Ngừng bán</label>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">📝 Ghi chú</div>
+            <textarea placeholder="Nhập ghi chú nội bộ..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="footer">© 2024 DNP Logistics WMS – Hệ thống Quản lý Kho Thông minh – v2.4.0</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kiểm tra xuất kho – DNP Logistics</title>
+<link rel="stylesheet" href="09-kiem-tra-xuat-kho.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🚚</div><div><div class="logo-text">DNP Logistics</div><div class="logo-sub">QUẢN LÝ KHO HÀNG</div></div></div>
+    <div class="sidebar-section">CHÍNH</div>
+    <nav>
+      <button class="nav-item">🏠 Trang chủ</button>
+      <button class="nav-item">📥 Quản lý nhập kho</button>
+      <button class="nav-item active">📤 Quản lý xuất kho</button>
+      <button class="nav-item">📦 Hàng hóa</button>
+      <button class="nav-item">🏭 Quản lý tồn kho</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row"><div class="avatar-sm">NV</div><div><div class="user-name">Nguyễn Văn A</div><div class="user-role">Quản trị viên</div></div></div>
+      <button class="logout">↪ Đăng xuất</button>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="search-wrap"><span class="ico-search">🔍</span><input type="text" placeholder="Tìm kiếm..."></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="icon-btn">🔔<span class="badge">3</span></div>
+        <div class="divider-v"></div>
+        <div class="user-chip"><div class="avatar-xs">AD</div><div><div class="chip-name">Admin DNP</div><div class="chip-role">Quản trị viên</div></div><span>▾</span></div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="breadcrumb"><a>Xuất kho</a><span>›</span><a>PX-240501-001</a><span>›</span><span>Kiểm tra xuất kho</span></div>
+      <div class="page-header">
+        <div>
+          <div class="page-title">Kiểm tra xuất kho</div>
+          <div class="page-sub">Phiếu xuất: PX-240501-001 · Khách hàng: Vinafood 1</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn">← Quay lại</button>
+          <button class="btn btn-success">✅ Xác nhận kiểm tra</button>
+        </div>
+      </div>
+      <div class="inspect-grid">
+        <div>
+          <div class="card">
+            <div class="card-title">☑️ Danh sách kiểm tra</div>
+            <div class="checklist">
+              <div class="check-item pass">
+                <div class="check-row">
+                  <div class="check-label">1. Kiểm tra số lượng hàng xuất</div>
+                  <div class="check-btns">
+                    <button class="check-btn sel-pass">✓ Đạt</button>
+                    <button class="check-btn">✗ Không đạt</button>
+                    <button class="check-btn">— N/A</button>
+                  </div>
+                </div>
+              </div>
+              <div class="check-item pass">
+                <div class="check-row">
+                  <div class="check-label">2. Kiểm tra chất lượng hàng hóa</div>
+                  <div class="check-btns">
+                    <button class="check-btn sel-pass">✓ Đạt</button>
+                    <button class="check-btn">✗ Không đạt</button>
+                    <button class="check-btn">— N/A</button>
+                  </div>
+                </div>
+              </div>
+              <div class="check-item fail">
+                <div class="check-row">
+                  <div class="check-label">3. Kiểm tra nhãn mác và tem seal</div>
+                  <div class="check-btns">
+                    <button class="check-btn">✓ Đạt</button>
+                    <button class="check-btn sel-fail">✗ Không đạt</button>
+                    <button class="check-btn">— N/A</button>
+                  </div>
+                </div>
+                <div class="check-note"><input type="text" value="Phát hiện 2 kiện thiếu tem seal, cần bổ sung trước khi xuất"></div>
+              </div>
+              <div class="check-item">
+                <div class="check-row">
+                  <div class="check-label">4. Kiểm tra bao bì đóng gói</div>
+                  <div class="check-btns">
+                    <button class="check-btn sel-pass">✓ Đạt</button>
+                    <button class="check-btn">✗ Không đạt</button>
+                    <button class="check-btn">— N/A</button>
+                  </div>
+                </div>
+              </div>
+              <div class="check-item">
+                <div class="check-row">
+                  <div class="check-label">5. Kiểm tra container / phương tiện vận chuyển</div>
+                  <div class="check-btns">
+                    <button class="check-btn sel-pass">✓ Đạt</button>
+                    <button class="check-btn">✗ Không đạt</button>
+                    <button class="check-btn">— N/A</button>
+                  </div>
+                </div>
+              </div>
+              <div class="check-item">
+                <div class="check-row">
+                  <div class="check-label">6. Kiểm tra chứng từ và hóa đơn</div>
+                  <div class="check-btns">
+                    <button class="check-btn">✓ Đạt</button>
+                    <button class="check-btn">✗ Không đạt</button>
+                    <button class="check-btn sel-na">— N/A</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">📊 Đối chiếu số lượng</div>
+            <table class="qty-table">
+              <thead><tr><th>Sản phẩm</th><th>SL phiếu xuất</th><th>SL thực tế</th><th>Chênh lệch</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div style="font-weight:600">iPhone 15 Pro Max 256GB</div><div style="font-size:11px;color:#9CA3AF">ELC-2023-X1</div></td>
+                  <td>10</td>
+                  <td>10</td>
+                  <td class="qty-match">0 (Khớp)</td>
+                </tr>
+                <tr>
+                  <td><div style="font-weight:600">Máy giặt LG Inverter 9kg</div><div style="font-size:11px;color:#9CA3AF">HME-WM-800</div></td>
+                  <td>5</td>
+                  <td>4</td>
+                  <td class="qty-mismatch">-1 (Thiếu)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title">📋 Thông tin phiếu</div>
+            <div class="info-field"><div class="info-label">Mã phiếu xuất</div><div class="info-val" style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-001</div></div>
+            <div class="info-field"><div class="info-label">Khách hàng</div><div class="info-val" style="font-weight:700">Vinafood 1</div></div>
+            <div class="info-field"><div class="info-label">Ngày xuất kho</div><div class="info-val">20/05/2024 08:30</div></div>
+            <div class="info-field"><div class="info-label">Container</div><div class="info-val" style="font-family:monospace">MM6329819</div></div>
+            <div class="info-field"><div class="info-label">Số xe</div><div class="info-val">43C-24097</div></div>
+          </div>
+          <div class="card">
+            <div class="card-title">👤 Người kiểm tra</div>
+            <div class="info-field"><div class="info-label">Người kiểm tra</div><div class="info-val" style="font-weight:700">Nguyễn Văn A</div></div>
+            <div class="info-field"><div class="info-label">Chức vụ</div><div class="info-val">Thủ kho</div></div>
+            <div class="info-field"><div class="info-label">Thời gian kiểm tra</div><div class="info-val">20/05/2024 09:00</div></div>
+          </div>
+          <div class="card">
+            <div class="card-title">📈 Tiến độ kiểm tra</div>
+            <div class="progress-section">
+              <div class="progress-text"><span>Hoàn thành</span><span style="font-weight:700;color:#16A34A">4/6 mục</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:67%"></div></div>
+            </div>
+            <div class="counter-grid">
+              <div class="counter-item" style="border-color:#BBF7D0;background:#F0FDF4"><div class="counter-val" style="color:#15803D">4</div><div class="counter-lbl">Đạt</div></div>
+              <div class="counter-item" style="border-color:#FECACA;background:#FEF2F2"><div class="counter-val" style="color:#B91C1C">1</div><div class="counter-lbl">Không đạt</div></div>
+              <div class="counter-item" style="border-color:#DDD6FE;background:#F5F3FF"><div class="counter-val" style="color:#6D28D9">1</div><div class="counter-lbl">N/A</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">© 2024 DNP Logistics WMS – v2.4.0</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

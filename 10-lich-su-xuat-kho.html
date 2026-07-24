@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lịch sử xuất kho – DNP Logistics</title>
+<link rel="stylesheet" href="10-lich-su-xuat-kho.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🚚</div><div><div class="logo-text">DNP Logistics</div><div class="logo-sub">QUẢN LÝ KHO HÀNG</div></div></div>
+    <div class="sidebar-section">CHÍNH</div>
+    <nav>
+      <button class="nav-item">🏠 Trang chủ</button>
+      <button class="nav-item">📥 Quản lý nhập kho</button>
+      <button class="nav-item active">📤 Quản lý xuất kho</button>
+      <button class="nav-item">📦 Hàng hóa</button>
+      <button class="nav-item">🏭 Quản lý tồn kho</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-row"><div class="avatar-sm">NV</div><div><div class="user-name">Nguyễn Văn A</div><div class="user-role">Quản trị viên</div></div></div>
+      <button class="logout">↪ Đăng xuất</button>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <div class="search-wrap"><span class="ico-search">🔍</span><input type="text" placeholder="Tìm kiếm lịch sử xuất kho..."></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="icon-btn">🔔<span class="badge">3</span></div>
+        <div class="divider-v"></div>
+        <div class="user-chip"><div class="avatar-xs">AD</div><div><div class="chip-name">Admin DNP</div><div class="chip-role">Quản trị viên</div></div><span>▾</span></div>
+      </div>
+    </header>
+    <div class="content">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Lịch sử xuất kho</div>
+          <div class="page-sub">Thống kê và theo dõi toàn bộ lịch sử xuất kho trong hệ thống</div>
+        </div>
+        <div class="btn-group">
+          <button class="btn">⬇️ Xuất báo cáo</button>
+          <button class="btn btn-primary">🗓️ Chọn khoảng thời gian</button>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon" style="background:#EFF6FF">📄</div><div class="stat-value">12</div><div class="stat-label">Tổng phiếu xuất</div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#F0FDF4">✅</div><div class="stat-value">5</div><div class="stat-label">Hoàn thành</div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#FFFBEB">⚙️</div><div class="stat-value">3</div><div class="stat-label">Đang xử lý</div></div>
+        <div class="stat-card"><div class="stat-icon" style="background:#FEF2F2">❌</div><div class="stat-value">4</div><div class="stat-label">Đã hủy</div></div>
+      </div>
+      <div class="main-grid">
+        <div>
+          <div class="card">
+            <div class="card-title">📊 Biểu đồ xuất kho theo tuần</div>
+            <div class="chart-row">
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar done" style="height:50px;width:100%"></div><span class="bar-val">5</span></div><div class="bar-lbl">T2<br>13/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar done" style="height:80px;width:100%"></div><span class="bar-val">8</span></div><div class="bar-lbl">T3<br>14/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar proc" style="height:40px;width:100%"></div><span class="bar-val">4</span></div><div class="bar-lbl">T4<br>15/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar done" style="height:100px;width:100%"></div><span class="bar-val">10</span></div><div class="bar-lbl">T5<br>16/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar proc" style="height:60px;width:100%"></div><span class="bar-val">6</span></div><div class="bar-lbl">T6<br>17/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar cancel" style="height:30px;width:100%"></div><span class="bar-val">3</span></div><div class="bar-lbl">T7<br>18/5</div></div>
+              <div class="bar-wrap"><div style="position:relative;width:100%;flex:1;display:flex;align-items:flex-end"><div class="bar done" style="height:70px;width:100%"></div><span class="bar-val">7</span></div><div class="bar-lbl">CN<br>19/5</div></div>
+            </div>
+          </div>
+          <div class="card" style="overflow:hidden;padding:0">
+            <div style="padding:16px 20px 10px;border-bottom:1px solid #F3F4F6">
+              <div style="font-size:14px;font-weight:700;color:#111827">Danh sách lịch sử</div>
+            </div>
+            <table class="hist">
+              <thead><tr><th>Mã phiếu xuất</th><th>Khách hàng</th><th>Container</th><th>Ngày xuất</th><th>Tổng tiền</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><div style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-001</div></td>
+                  <td><div style="font-weight:600">Vinafood 1</div><div style="font-size:11px;color:#9CA3AF">20/05/2024</div></td>
+                  <td style="font-family:monospace;font-size:12px">MM6329819</td>
+                  <td>20/05/2024</td>
+                  <td style="font-weight:700;color:#2563EB">345,000,000 VND</td>
+                  <td><span class="status-badge s-done">Hoàn thành</span></td>
+                  <td><div class="action-btns"><button class="action-btn">👁</button><button class="action-btn">📄</button></div></td>
+                </tr>
+                <tr>
+                  <td><div style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-002</div></td>
+                  <td><div style="font-weight:600">Logistics Hải Phòng</div><div style="font-size:11px;color:#9CA3AF">20/05/2024</div></td>
+                  <td style="font-family:monospace;font-size:12px">TGJ4459326</td>
+                  <td>20/05/2024</td>
+                  <td style="font-weight:700;color:#2563EB">168,000,000 VND</td>
+                  <td><span class="status-badge s-proc">Đang xử lý</span></td>
+                  <td><div class="action-btns"><button class="action-btn">👁</button><button class="action-btn">📄</button></div></td>
+                </tr>
+                <tr>
+                  <td><div style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-003</div></td>
+                  <td><div style="font-weight:600">Hoa Thy Textile</div><div style="font-size:11px;color:#9CA3AF">20/05/2024</div></td>
+                  <td style="font-family:monospace;font-size:12px">WNLOT76128</td>
+                  <td>20/05/2024</td>
+                  <td style="font-weight:700;color:#9CA3AF">—</td>
+                  <td><span class="status-badge s-cancel">Đã hủy</span></td>
+                  <td><div class="action-btns"><button class="action-btn">👁</button><button class="action-btn">📄</button></div></td>
+                </tr>
+                <tr>
+                  <td><div style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-004</div></td>
+                  <td><div style="font-weight:600">Vietcom Logistics</div><div style="font-size:11px;color:#9CA3AF">20/05/2024</div></td>
+                  <td style="font-family:monospace;font-size:12px">MK00322514</td>
+                  <td>20/05/2024</td>
+                  <td style="font-weight:700;color:#2563EB">500,000,000 VND</td>
+                  <td><span class="status-badge s-done">Hoàn thành</span></td>
+                  <td><div class="action-btns"><button class="action-btn">👁</button><button class="action-btn">📄</button></div></td>
+                </tr>
+                <tr>
+                  <td><div style="color:#2563EB;font-family:monospace;font-weight:700">PX-240501-005</div></td>
+                  <td><div style="font-weight:600">T&amp;T Group</div><div style="font-size:11px;color:#9CA3AF">20/05/2024</div></td>
+                  <td style="font-family:monospace;font-size:12px">00JJ054112</td>
+                  <td>20/05/2024</td>
+                  <td style="font-weight:700;color:#2563EB">210,000,000 VND</td>
+                  <td><span class="status-badge s-wait">Chờ duyệt</span></td>
+                  <td><div class="action-btns"><button class="action-btn">👁</button><button class="action-btn">📄</button></div></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="pagination" style="padding:11px 16px">
+              <div class="page-info">Hiển thị <strong>1 - 8</strong> trong tổng số <strong>12</strong> bản ghi</div>
+              <div class="page-btns">
+                <button class="page-btn">‹</button>
+                <button class="page-btn active">1</button>
+                <button class="page-btn">2</button>
+                <button class="page-btn">›</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-title">🔍 Bộ lọc nhanh</div>
+            <div class="quick-filter">
+              <div>
+                <div class="qf-label">Trạng thái</div>
+                <div class="qf-options">
+                  <label class="qf-opt sel"><input type="checkbox" checked style="display:none"><div class="qf-dot" style="background:#6B7280"></div>Tất cả (12)</label>
+                  <label class="qf-opt"><input type="checkbox" style="display:none"><div class="qf-dot" style="background:#16A34A"></div>Hoàn thành (5)</label>
+                  <label class="qf-opt"><input type="checkbox" style="display:none"><div class="qf-dot" style="background:#F59E0B"></div>Đang xử lý (3)</label>
+                  <label class="qf-opt"><input type="checkbox" style="display:none"><div class="qf-dot" style="background:#1D4ED8"></div>Chờ duyệt (0)</label>
+                  <label class="qf-opt"><input type="checkbox" style="display:none"><div class="qf-dot" style="background:#DC2626"></div>Đã hủy (4)</label>
+                </div>
+              </div>
+              <div>
+                <div class="qf-label">Thời gian</div>
+                <div class="qf-options">
+                  <label class="qf-opt"><input type="radio" name="time" style="display:none"> 📅 Hôm nay</label>
+                  <label class="qf-opt sel"><input type="radio" name="time" checked style="display:none"> 📅 Tuần này</label>
+                  <label class="qf-opt"><input type="radio" name="time" style="display:none"> 📅 Tháng này</label>
+                  <label class="qf-opt"><input type="radio" name="time" style="display:none"> 📅 Tùy chỉnh</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">💰 Thống kê giá trị</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid #F3F4F6"><span>Hoàn thành</span><span style="font-weight:700;color:#16A34A">845,000,000</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0;border-bottom:1px solid #F3F4F6"><span>Đang xử lý</span><span style="font-weight:700;color:#F59E0B">378,000,000</span></div>
+              <div style="display:flex;justify-content:space-between;font-size:13px;padding:7px 0"><span style="font-weight:700">Tổng giá trị</span><span style="font-weight:800;color:#2563EB">1,223,000,000 VND</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">© 2024 DNP Logistics WMS – v2.4.0</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
