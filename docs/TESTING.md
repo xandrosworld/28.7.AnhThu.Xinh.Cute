@@ -35,6 +35,13 @@ Kết quả xác minh cuối trên Python 3.12/SQLite: **68 test đạt, 1 test 
 SQL Server được skip; coverage toàn package `app` đạt 87,54%**, vượt ngưỡng
 CI 85%.
 
+Kết quả chính thức trên SQL Server 2022 + ODBC 18: **67 passed, 2 skipped** tại
+[GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
+SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`. Chỉ hai test backup/restore
+SQLite trong `tests/test_cli.py` bị skip; test concurrency dùng hai
+transaction/kết nối độc lập đã chạy và đạt. Cùng workflow, các job
+SQLite/Python 3.10 và 3.12 cũng thành công.
+
 Playwright chỉ nên bật trong CI sau khi smoke test ổn định và browser binaries
 được cache/cài rõ ràng. Cho đến lúc đó, checklist trình duyệt trong
 `ACCEPTANCE_TESTS.md` vẫn là kiểm tra thủ công và được ghi đúng như vậy.

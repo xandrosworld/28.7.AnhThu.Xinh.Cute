@@ -32,12 +32,12 @@ số lượng test vào báo cáo.
 | NFR-001 | Dễ sử dụng | Design system tiếng Việt, responsive, loading/empty/error/success | AT-19; checklist có biên bản |
 | NFR-002 | Đăng nhập an toàn | Hash mật khẩu, HttpOnly/SameSite, CSRF, security headers | AT-02, AT-03; test auth/security |
 | NFR-003 | Phân quyền | Decorator/policy ở server cho cả trang và API | test ma trận vai trò/endpoint |
-| NFR-004 | Lưu bằng DB | SQLAlchemy/Alembic; SQLite và SQL Server | AT-17, AT-18 |
+| NFR-004 | Lưu bằng DB | SQLAlchemy/Alembic; SQLite và SQL Server | AT-17; **AT-18 đạt** trên [CI run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947) |
 | NFR-005 | Phản hồi ≤5 giây | Index, phân trang; benchmark 1.012 sản phẩm, 5.010 lot và 5.000 movement | Đạt trên môi trường đo; xem `PERFORMANCE.md` |
 | NFR-006 | Tìm nhanh | Index mã, barcode, trạng thái, ngày, khóa ngoại | test search + kiểm tra migration |
 | NFR-007 | Chrome/Edge/Firefox | HTML/CSS/JS không phụ thuộc CDN; fallback barcode | AT-19 |
 | NFR-008 | Backup định kỳ | CLI backup/restore SQLite; hướng dẫn SQL Server | AT-16 |
-| NFR-009 | Toàn vẹn tồn | Decimal, constraint, transaction, lock/idempotency, không âm | AT-06, AT-08–AT-13 |
+| NFR-009 | Toàn vẹn tồn | Decimal, constraint, transaction, lock/idempotency, không âm | AT-06, AT-08–AT-13; concurrency SQL Server đã đạt trên CI |
 | NFR-010 | Lưu lịch sử | movement/audit ghi người, thời gian, tham chiếu và lý do | test audit/movement/report |
 
 ## Quy tắc nghiệp vụ trọng yếu
@@ -53,9 +53,11 @@ số lượng test vào báo cáo.
   rollback cả tồn lẫn movement.
 - Master đã được tham chiếu chỉ được ngừng hoạt động; lịch sử không bị xóa.
 
-## Trạng thái cần xác minh trước nộp
+## Trạng thái xác minh trước nộp
 
-- AT-18 chỉ “Đạt” khi workflow SQL Server thật đã xanh trên GitHub Actions.
+- **AT-18 đã đạt:** [GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
+  tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã xanh; SQL Server 2022 +
+  ODBC 18 đạt 67 passed, 2 SQLite-only skipped và test concurrency đã chạy/đạt.
 - NFR-005 đã có log benchmark độc lập và JSON bằng chứng trong
   `PERFORMANCE.md`; phải đo lại nếu đổi database hoặc hạ tầng.
 - AT-19 là kiểm tra trình duyệt thủ công cho đến khi có Playwright ổn định;

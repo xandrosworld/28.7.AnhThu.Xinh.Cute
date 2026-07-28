@@ -3,7 +3,8 @@
 Usage after verification:
     python docs/generate_completion_report.py \
         --test-result "68 passed, 1 SQL Server test skipped locally" \
-        --coverage "87.54%"
+        --coverage "87.54%" \
+        --sqlserver passed
 
 The result is always written under ``docs/``.  Test results are required so a
 stale or invented count cannot silently enter the submission report.
@@ -30,6 +31,11 @@ OUTPUT = (
     / "docs"
     / "49K21.1_NguyenHoangThanhTruc_Chuong3_KPI4_HoanThien.docx"
 )
+CI_RUN_URL = (
+    "https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/"
+    "actions/runs/30346223947"
+)
+CI_SHA = "c4a2ad80fd2a5b894f6969d2604359786add8f87"
 
 
 def add_table(document, headers, rows):
@@ -117,10 +123,29 @@ def main():
 
     document.add_heading("3. Kết quả kiểm thử đã xác nhận", level=2)
     sql_result = (
-        "Đạt trên SQL Server 2022 thật"
+        "Đạt trên SQL Server 2022 + ODBC 18: 67 passed, 2 test backup/restore "
+        "SQLite skipped; test concurrency đã chạy và đạt"
         if args.sqlserver == "passed"
         else "Chờ kết quả job SQL Server 2022; chưa tuyên bố đạt"
     )
+    ci_result = (
+        f"Run 30346223947 thành công tại SHA {CI_SHA}"
+        if args.sqlserver == "passed"
+        else "Chưa ghi nhận bằng chứng CI SQL Server đạt"
+    )
+    sql_traceability = (
+        "AT-18 và NFR lưu trữ/toàn vẹn trên SQL Server đã đạt tại "
+        f"{CI_RUN_URL}, SHA {CI_SHA}: 67 passed, 2 SQLite-only skipped; "
+        "test concurrency đã chạy và đạt. "
+        if args.sqlserver == "passed"
+        else "AT-18 chưa được đánh dấu đạt do chưa có bằng chứng CI SQL Server. "
+    )
+    if args.sqlserver == "passed":
+        document.add_paragraph(
+            "Bằng chứng CI chính thức: "
+            f"{CI_RUN_URL} tại SHA {CI_SHA}. Các job SQLite/Python 3.10, "
+            "SQLite/Python 3.12 và SQL Server 2022 đều thành công."
+        )
     add_table(
         document,
         ("Hạng mục", "Kết quả"),
@@ -134,6 +159,10 @@ def main():
             ("SQLite", "Migrate, seed và test trong quy trình xác minh"),
             ("SQL Server", sql_result),
             (
+                "GitHub Actions",
+                ci_result,
+            ),
+            (
                 "Trình duyệt",
                 "Checklist thủ công Chrome/Edge/Firefox; không cộng vào pytest",
             ),
@@ -146,8 +175,10 @@ def main():
         "docs/REQUIREMENTS_TRACEABILITY.md tới API/màn hình và acceptance test. "
         "NFR-005 đã đạt benchmark độc lập với 1.012 sản phẩm, 5.010 lot và "
         "5.000 stock movement; request chậm nhất 55,413 ms, thấp hơn ngưỡng "
-        "5 giây. Trình duyệt và SQL Server chỉ được đánh dấu đạt sau khi có "
-        "bằng chứng tương ứng."
+        "5 giây. "
+        f"{sql_traceability}"
+        "Trình duyệt vẫn được nghiệm thu "
+        "theo checklist thủ công."
     )
 
     document.add_heading("5. Nghiệm thu nhanh", level=2)

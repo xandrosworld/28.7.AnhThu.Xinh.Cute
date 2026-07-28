@@ -3,8 +3,11 @@
 Kết quả cục bộ cuối trên Python 3.12/SQLite: **68 test đạt, 1 test cạnh
 tranh dành riêng cho SQL Server được skip; coverage package `app` đạt
 87,54%**.
-Kết quả SQL Server chỉ được ghi đạt sau khi job CI thật hoàn tất. Kiểm tra
-trình duyệt thủ công không tính gộp vào số test pytest.
+SQL Server 2022 + ODBC 18 đã đạt **67 passed, 2 skipped** tại
+[GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
+SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`. Hai skip chỉ là backup/restore
+SQLite trong `tests/test_cli.py`; test cạnh tranh đã chạy và đạt. Kiểm tra trình
+duyệt thủ công không tính gộp vào số test pytest.
 
 | ID | Vai trò / thao tác | Kết quả mong đợi |
 |---|---|---|
@@ -25,7 +28,7 @@ trình duyệt thủ công không tính gộp vào số test pytest.
 | AT-15 | JSON, số, ngày sai kiểu | 400/422 có `error.code/message/fields` |
 | AT-16 | Backup → đổi dữ liệu → restore | Dữ liệu và integrity check trở lại hợp lệ |
 | AT-17 | Migrate/seed chạy trên SQLite | Hoàn tất từ database trống |
-| AT-18 | Migrate/test trên SQL Server 2022 | Job CI dùng ODBC 18 đạt |
+| AT-18 | Migrate/test trên SQL Server 2022 | **Đạt** — CI ODBC 18: 67 passed, 2 SQLite-only skipped; concurrency đạt ([run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947), SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`) |
 | AT-19 | Chrome/Edge/Firefox, 390/1024/1366 px | Không tràn; bàn phím, focus và trạng thái rõ |
 
 ## Điều kiện đạt trước khi nộp

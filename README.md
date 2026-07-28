@@ -135,6 +135,13 @@ Không commit mật khẩu hoặc chuỗi kết nối thật. Xem thêm
 2022 riêng: job này tạo database thật, chạy migration/seed rồi chạy test qua
 ODBC 18; không giả lập bằng SQLite.
 
+Bằng chứng CI chính thức: [run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
+trên commit `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**. Hai job
+SQLite/Python 3.10 và 3.12 đều xanh; job SQL Server 2022 + ODBC 18 đạt
+**67 passed, 2 skipped**. Hai test bị skip chỉ là backup/restore SQLite trong
+`tests/test_cli.py`; test cạnh tranh xác nhận xuất đã thực sự chạy và đạt trên
+SQL Server.
+
 ## Migration
 
 Sau khi thay đổi model:
@@ -181,6 +188,12 @@ Kết quả xác minh cục bộ cuối trên Python 3.12/SQLite:
 **68 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
 toàn package `app` đạt 87,54%**. CI đặt ngưỡng 85% cho toàn package. Không tính
 checklist trình duyệt thủ công vào số test tự động.
+
+Kết quả SQL Server CI tại
+[run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
+SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`: **67 passed, 2 skipped**;
+hai skip chỉ dành cho CLI backup/restore SQLite, còn test concurrency đã chạy
+và đạt.
 
 Bộ test bao phủ:
 

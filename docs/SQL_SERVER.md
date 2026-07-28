@@ -26,6 +26,19 @@ Các lệnh chính xác được duy trì trong `README.md` và workflow CI đ�
 liệu lệch với code. Job SQL Server phải thực sự chạy migration và test; không
 được thay bằng SQLite dưới cùng tên job.
 
+## Bằng chứng CI đã nghiệm thu
+
+[GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
+tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**:
+
+- SQLite/Python 3.10: đạt.
+- SQLite/Python 3.12: đạt.
+- SQL Server 2022 + ODBC Driver 18: **67 passed, 2 skipped**.
+- Hai skip chỉ là test CLI backup/restore dành riêng cho SQLite trong
+  `tests/test_cli.py`.
+- Test cạnh tranh xác nhận xuất dùng hai transaction/kết nối độc lập đã chạy
+  và đạt trên SQL Server thật.
+
 ## Backup
 
 - Development SQLite: dùng CLI backup/restore của ứng dụng.
