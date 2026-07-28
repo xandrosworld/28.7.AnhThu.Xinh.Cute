@@ -1,8 +1,8 @@
 # Kịch bản kiểm thử chấp nhận
 
-Kết quả cục bộ cuối trên Python 3.12/SQLite: **65 test đạt, 1 test cạnh
+Kết quả cục bộ cuối trên Python 3.12/SQLite: **68 test đạt, 1 test cạnh
 tranh dành riêng cho SQL Server được skip; coverage package `app` đạt
-87,48%**.
+87,54%**.
 Kết quả SQL Server chỉ được ghi đạt sau khi job CI thật hoàn tất. Kiểm tra
 trình duyệt thủ công không tính gộp vào số test pytest.
 

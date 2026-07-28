@@ -2,8 +2,8 @@
 
 Usage after verification:
     python docs/generate_completion_report.py \
-        --test-result "65 passed, 1 SQL Server test skipped locally" \
-        --coverage "87.48%"
+        --test-result "68 passed, 1 SQL Server test skipped locally" \
+        --coverage "87.54%"
 
 The result is always written under ``docs/``.  Test results are required so a
 stale or invented count cannot silently enter the submission report.
@@ -48,12 +48,12 @@ def parse_args():
     parser.add_argument(
         "--test-result",
         required=True,
-        help='Kết quả pytest thật, ví dụ "65 passed"',
+        help='Kết quả pytest thật, ví dụ "68 passed"',
     )
     parser.add_argument(
         "--coverage",
         default="Chưa ghi nhận",
-        help='Coverage thật, ví dụ "87.48%%"; không cung cấp nếu chưa đo',
+        help='Coverage thật, ví dụ "87.54%%"; không cung cấp nếu chưa đo',
     )
     parser.add_argument(
         "--sqlserver",

@@ -31,8 +31,8 @@ Lệnh cài đặt và chạy chính xác nằm trong `README.md`. CI chạy:
 - Coverage toàn package ứng dụng, ngưỡng 85%, và lưu XML artifact.
 - Compile/static checks cùng kiểm tra route/asset.
 
-Kết quả xác minh cuối trên Python 3.12/SQLite: **65 test đạt, 1 test concurrency
-SQL Server được skip; coverage toàn package `app` đạt 87,48%**, vượt ngưỡng
+Kết quả xác minh cuối trên Python 3.12/SQLite: **68 test đạt, 1 test concurrency
+SQL Server được skip; coverage toàn package `app` đạt 87,54%**, vượt ngưỡng
 CI 85%.
 
 Playwright chỉ nên bật trong CI sau khi smoke test ổn định và browser binaries

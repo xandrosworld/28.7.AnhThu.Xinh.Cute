@@ -4,8 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.dialects import mssql
 from sqlalchemy.schema import CreateTable
 
+from app.api import USER_ACTIVITY_COUNT_SQL
 from app.db import _mssql_insert_with_identity, _mssql_sql
-from app.models import InventoryLot, Product, Receipt
+from app.extensions import db as orm
+from app.models import InboundInspection, InventoryLot, Product, Receipt, ReceiptItem
 from app.services import _locked
 
 
@@ -76,3 +78,45 @@ def test_mssql_uses_default_no_action_instead_of_unsupported_restrict():
         for path in Path("migrations/versions").glob("*.py")
     ).upper()
     assert "RESTRICT" not in migration_source
+
+
+def test_user_activity_query_needs_no_union_pagination_translation():
+    statement, params = _mssql_sql(USER_ACTIVITY_COUNT_SQL, [7] * 6)
+    assert "UNION" not in statement.upper()
+    assert "LIMIT" not in statement.upper()
+    assert "ORDER BY" not in statement.upper()
+    assert params == (7, 7, 7, 7, 7, 7)
+
+
+def test_human_facing_columns_compile_as_nvarchar_for_sqlserver():
+    ddl = "\n".join(
+        str(CreateTable(model.__table__).compile(dialect=mssql.dialect()))
+        for model in (Product, Receipt, ReceiptItem, InboundInspection)
+    ).upper()
+    assert "NAME NVARCHAR(200)" in ddl
+    assert "NOTE NVARCHAR(1000)" in ddl
+    assert ddl.count("ISSUE_NOTE NVARCHAR(500)") == 2
+    assert "DESCRIPTION NVARCHAR(1000)" in ddl
+
+    all_ddl = "\n".join(
+        str(CreateTable(table).compile(dialect=mssql.dialect()))
+        for table in orm.metadata.sorted_tables
+    ).upper()
+    assert " NTEXT" not in all_ddl
+    assert " VARCHAR(" not in all_ddl
+    assert " TEXT" not in all_ddl
+    assert "CONTRACT_EMAILS NVARCHAR(MAX)" in all_ddl
+    assert "DETAILS NVARCHAR(MAX)" in all_ddl
+
+
+def test_sqlite_round_trips_vietnamese_business_text(db):
+    expected = "Thiếu 01 kiện – vỏ móp, chờ đối soát"
+    db.execute(
+        "UPDATE receipt_items SET issue_note=? WHERE id=1",
+        (expected,),
+    )
+    db.commit()
+    actual = db.execute(
+        "SELECT issue_note FROM receipt_items WHERE id=1"
+    ).fetchone()[0]
+    assert actual == expected

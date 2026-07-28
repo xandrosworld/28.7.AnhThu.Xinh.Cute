@@ -30,7 +30,7 @@ class TimestampMixin:
 
 class ActiveMixin:
     status = db.Column(
-        db.String(16), nullable=False, default="active",
+        db.Unicode(16), nullable=False, default="active",
         server_default="active", index=True,
     )
 
@@ -38,9 +38,9 @@ class ActiveMixin:
 class Role(db.Model):
     __tablename__ = "roles"
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(32), nullable=False, unique=True)
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.String(255), nullable=False, default="")
+    code = db.Column(db.Unicode(32), nullable=False, unique=True)
+    name = db.Column(db.Unicode(100), nullable=False)
+    description = db.Column(db.Unicode(255), nullable=False, default="")
 
 
 class User(TimestampMixin, db.Model):
@@ -53,31 +53,31 @@ class User(TimestampMixin, db.Model):
         CheckConstraint("status IN ('active','locked')", name="valid_status"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(30), nullable=False, unique=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    full_name = db.Column(db.String(150), nullable=False)
-    email = db.Column(db.String(255), nullable=False, unique=True)
-    phone = db.Column(db.String(30), nullable=False, default="", server_default="")
-    role = db.Column(db.String(16), nullable=False)
+    username = db.Column(db.Unicode(30), nullable=False, unique=True)
+    password_hash = db.Column(db.Unicode(255), nullable=False)
+    full_name = db.Column(db.Unicode(150), nullable=False)
+    email = db.Column(db.Unicode(255), nullable=False, unique=True)
+    phone = db.Column(db.Unicode(30), nullable=False, default="", server_default="")
+    role = db.Column(db.Unicode(16), nullable=False)
     role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=True, index=True)
-    status = db.Column(db.String(16), nullable=False, default="active")
-    avatar_initials = db.Column(db.String(8), nullable=False, default="", server_default="")
+    status = db.Column(db.Unicode(16), nullable=False, default="active")
+    avatar_initials = db.Column(db.Unicode(8), nullable=False, default="", server_default="")
 
 
 class Category(TimestampMixin, ActiveMixin, db.Model):
     __tablename__ = "categories"
     __table_args__ = (CheckConstraint("status IN ('active','inactive')", name="valid_status"),)
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True)
-    name = db.Column(db.String(150), nullable=False, unique=True)
-    description = db.Column(db.String(500), nullable=False, default="", server_default="")
+    code = db.Column(db.Unicode(20), nullable=False, unique=True)
+    name = db.Column(db.Unicode(150), nullable=False, unique=True)
+    description = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
 
 
 class Unit(ActiveMixin, db.Model):
     __tablename__ = "units"
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True)
-    name = db.Column(db.String(80), nullable=False)
+    code = db.Column(db.Unicode(20), nullable=False, unique=True)
+    name = db.Column(db.Unicode(80), nullable=False)
     allow_break_pack = db.Column(db.Boolean, nullable=False, default=False)
 
 
@@ -85,21 +85,21 @@ class Warehouse(ActiveMixin, db.Model):
     __tablename__ = "warehouses"
     __table_args__ = (CheckConstraint("status IN ('active','inactive')", name="valid_status"),)
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True)
-    name = db.Column(db.String(150), nullable=False)
-    address = db.Column(db.String(500), nullable=False, default="", server_default="")
+    code = db.Column(db.Unicode(20), nullable=False, unique=True)
+    name = db.Column(db.Unicode(150), nullable=False)
+    address = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
 
 
 class Customer(TimestampMixin, ActiveMixin, db.Model):
     __tablename__ = "customers"
     __table_args__ = (CheckConstraint("status IN ('active','inactive')", name="valid_status"),)
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True)
-    name = db.Column(db.String(200), nullable=False)
-    email = db.Column(db.String(255), nullable=False, default="", server_default="")
-    phone = db.Column(db.String(30), nullable=False, default="", server_default="")
+    code = db.Column(db.Unicode(20), nullable=False, unique=True)
+    name = db.Column(db.Unicode(200), nullable=False)
+    email = db.Column(db.Unicode(255), nullable=False, default="", server_default="")
+    phone = db.Column(db.Unicode(30), nullable=False, default="", server_default="")
     # Compatibility projection for the existing frontend.
-    contract_emails = db.Column(db.Text, nullable=False, default="", server_default="")
+    contract_emails = db.Column(db.Unicode, nullable=False, default="", server_default="")
 
 
 class CustomerContractEmail(TimestampMixin, ActiveMixin, db.Model):
@@ -115,19 +115,19 @@ class CustomerContractEmail(TimestampMixin, ActiveMixin, db.Model):
     customer_id = db.Column(
         db.Integer, db.ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    email = db.Column(db.String(255), nullable=False)
-    normalized_email = db.Column(db.String(255), nullable=False, index=True)
+    email = db.Column(db.Unicode(255), nullable=False)
+    normalized_email = db.Column(db.Unicode(255), nullable=False, index=True)
 
 
 class Supplier(TimestampMixin, ActiveMixin, db.Model):
     __tablename__ = "suppliers"
     __table_args__ = (CheckConstraint("status IN ('active','inactive')", name="valid_status"),)
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(20), nullable=False, unique=True)
-    name = db.Column(db.String(200), nullable=False)
-    email = db.Column(db.String(255), nullable=False, default="", server_default="")
-    phone = db.Column(db.String(30), nullable=False, default="", server_default="")
-    address = db.Column(db.String(500), nullable=False, default="", server_default="")
+    code = db.Column(db.Unicode(20), nullable=False, unique=True)
+    name = db.Column(db.Unicode(200), nullable=False)
+    email = db.Column(db.Unicode(255), nullable=False, default="", server_default="")
+    phone = db.Column(db.Unicode(30), nullable=False, default="", server_default="")
+    address = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
 
 
 class Product(TimestampMixin, ActiveMixin, db.Model):
@@ -146,21 +146,21 @@ class Product(TimestampMixin, ActiveMixin, db.Model):
         ),
     )
     id = db.Column(db.Integer, primary_key=True)
-    sku = db.Column(db.String(40), nullable=False, unique=True)
-    barcode = db.Column(db.String(100), nullable=True)
-    name = db.Column(db.String(200), nullable=False)
+    sku = db.Column(db.Unicode(40), nullable=False, unique=True)
+    barcode = db.Column(db.Unicode(100), nullable=True)
+    name = db.Column(db.Unicode(200), nullable=False)
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=False, index=True
     )
     warehouse_id = db.Column(
         db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True
     )
-    unit = db.Column(db.String(40), nullable=False)
+    unit = db.Column(db.Unicode(40), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey("units.id"), nullable=True, index=True)
     quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
     min_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
-    location = db.Column(db.String(100), nullable=False, default="", server_default="")
-    description = db.Column(db.String(1000), nullable=False, default="", server_default="")
+    location = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
+    description = db.Column(db.Unicode(1000), nullable=False, default="", server_default="")
 
 
 class InventoryLot(TimestampMixin, ActiveMixin, db.Model):
@@ -185,9 +185,9 @@ class InventoryLot(TimestampMixin, ActiveMixin, db.Model):
     warehouse_id = db.Column(
         db.Integer, db.ForeignKey("warehouses.id"), nullable=False
     )
-    unit = db.Column(db.String(40), nullable=False)
-    pallet_id = db.Column(db.String(100), nullable=False)
-    barcode = db.Column(db.String(100), nullable=True)
+    unit = db.Column(db.Unicode(40), nullable=False)
+    pallet_id = db.Column(db.Unicode(100), nullable=False)
+    barcode = db.Column(db.Unicode(100), nullable=True)
     quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0)
     expiry_date = db.Column(db.Date, nullable=True)
     received_at = db.Column(
@@ -212,8 +212,8 @@ class Receipt(TimestampMixin, db.Model):
         Index("ix_receipts_type_status", "receipt_type", "status"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(40), nullable=False, unique=True)
-    receipt_type = db.Column(db.String(16), nullable=False)
+    code = db.Column(db.Unicode(40), nullable=False, unique=True)
+    receipt_type = db.Column(db.Unicode(16), nullable=False)
     partner_id = db.Column(db.Integer, nullable=False, index=True)
     customer_id = db.Column(
         db.Integer, db.ForeignKey("customers.id"), nullable=True
@@ -221,15 +221,15 @@ class Receipt(TimestampMixin, db.Model):
     supplier_id = db.Column(
         db.Integer, db.ForeignKey("suppliers.id"), nullable=True
     )
-    partner_name = db.Column(db.String(200), nullable=False)
+    partner_name = db.Column(db.Unicode(200), nullable=False)
     warehouse_id = db.Column(
         db.Integer, db.ForeignKey("warehouses.id"), nullable=False
     )
-    request_email = db.Column(db.String(255), nullable=False, default="", server_default="")
-    container_no = db.Column(db.String(100), nullable=False, default="", server_default="")
-    seal_no = db.Column(db.String(100), nullable=False, default="", server_default="")
-    status = db.Column(db.String(16), nullable=False, default="draft")
-    note = db.Column(db.String(1000), nullable=False, default="", server_default="")
+    request_email = db.Column(db.Unicode(255), nullable=False, default="", server_default="")
+    container_no = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
+    seal_no = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
+    status = db.Column(db.Unicode(16), nullable=False, default="draft")
+    note = db.Column(db.Unicode(1000), nullable=False, default="", server_default="")
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     confirmed_at = db.Column(db.DateTime)
@@ -255,10 +255,10 @@ class ReceiptItem(db.Model):
     quantity = db.Column(db.Numeric(18, 3), nullable=False)
     accepted_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
     rejected_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
-    pallet_id = db.Column(db.String(100), nullable=False, default="", server_default="")
-    barcode = db.Column(db.String(100), nullable=False, default="", server_default="")
+    pallet_id = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
+    barcode = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
     expiry_date = db.Column(db.Date)
-    issue_note = db.Column(db.String(500), nullable=False, default="", server_default="")
+    issue_note = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
 
 
 @event.listens_for(Receipt, "before_insert")
@@ -288,7 +288,7 @@ class InboundInspection(TimestampMixin, db.Model):
     )
     accepted_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     rejected_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0)
-    issue_note = db.Column(db.String(500), nullable=False, default="")
+    issue_note = db.Column(db.Unicode(500), nullable=False, default="")
     inspected_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
 
 
@@ -323,12 +323,12 @@ class StockMovement(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False)
     lot_id = db.Column(db.Integer, db.ForeignKey("inventory_lots.id"), nullable=True)
-    movement_type = db.Column(db.String(20), nullable=False)
-    reference_code = db.Column(db.String(40), nullable=False)
+    movement_type = db.Column(db.Unicode(20), nullable=False)
+    reference_code = db.Column(db.Unicode(40), nullable=False)
     quantity_change = db.Column(db.Numeric(18, 3), nullable=False)
     balance_after = db.Column(db.Numeric(18, 3), nullable=False)
-    pallet_id = db.Column(db.String(100), nullable=False, default="", server_default="")
-    reason = db.Column(db.String(500), nullable=False, default="", server_default="")
+    pallet_id = db.Column(db.Unicode(100), nullable=False, default="", server_default="")
+    reason = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(
         db.DateTime, nullable=False, default=utcnow,
@@ -342,10 +342,10 @@ class Stocktake(TimestampMixin, db.Model):
         CheckConstraint("status IN ('draft','completed','cancelled')", name="valid_status"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    code = db.Column(db.String(40), nullable=False, unique=True)
+    code = db.Column(db.Unicode(40), nullable=False, unique=True)
     warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
-    status = db.Column(db.String(16), nullable=False, default="draft", server_default="draft")
-    note = db.Column(db.String(1000), nullable=False, default="", server_default="")
+    status = db.Column(db.Unicode(16), nullable=False, default="draft", server_default="draft")
+    note = db.Column(db.Unicode(1000), nullable=False, default="", server_default="")
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     confirmed_at = db.Column(db.DateTime)
@@ -366,7 +366,7 @@ class StocktakeItem(db.Model):
     inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False)
     system_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     counted_quantity = db.Column(db.Numeric(18, 3), nullable=False)
-    reason = db.Column(db.String(500), nullable=False, default="", server_default="")
+    reason = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
 
 
 class InventoryAdjustment(db.Model):
@@ -380,8 +380,8 @@ class InventoryAdjustment(db.Model):
     old_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     new_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     difference = db.Column(db.Numeric(18, 3), nullable=False)
-    reason = db.Column(db.String(200), nullable=False)
-    note = db.Column(db.String(500), nullable=False, default="", server_default="")
+    reason = db.Column(db.Unicode(200), nullable=False)
+    note = db.Column(db.Unicode(500), nullable=False, default="", server_default="")
     created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(
         db.DateTime, nullable=False, default=utcnow, index=True,
@@ -393,11 +393,11 @@ class AuditLog(db.Model):
     __tablename__ = "audit_logs"
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), index=True)
-    action = db.Column(db.String(80), nullable=False)
-    entity_type = db.Column(db.String(80), nullable=False)
+    action = db.Column(db.Unicode(80), nullable=False)
+    entity_type = db.Column(db.Unicode(80), nullable=False)
     entity_id = db.Column(db.Integer)
-    details = db.Column(db.Text, nullable=False, default="{}", server_default="{}")
-    ip_address = db.Column(db.String(64), nullable=False, default="", server_default="")
+    details = db.Column(db.Unicode, nullable=False, default="{}", server_default="{}")
+    ip_address = db.Column(db.Unicode(64), nullable=False, default="", server_default="")
     created_at = db.Column(
         db.DateTime, nullable=False, default=utcnow, index=True,
         server_default=db.func.current_timestamp(),

@@ -31,6 +31,14 @@ ROLE_LABELS = {
     "manager": "Chăm sóc khách hàng (tương thích)",
     "staff": "Nhân viên kho (tương thích)",
 }
+USER_ACTIVITY_COUNT_SQL = """
+SELECT
+  (SELECT COUNT(*) FROM inventory_adjustments WHERE created_by = ?)
+  + (SELECT COUNT(*) FROM receipts WHERE created_by = ? OR confirmed_by = ?)
+  + (SELECT COUNT(*) FROM stocktakes WHERE created_by = ? OR confirmed_by = ?)
+  + (SELECT COUNT(*) FROM stock_movements WHERE created_by = ?)
+  AS activity_count
+"""
 
 
 def error(message, status=400, errors=None):
@@ -818,17 +826,11 @@ def user_delete(user_id):
     ).fetchone()
     if user is None:
         return error("Không tìm thấy người dùng.", 404)
-    has_activity = database.execute(
-        """
-        SELECT 1 FROM inventory_adjustments WHERE created_by = ?
-        UNION ALL SELECT 1 FROM receipts WHERE created_by = ? OR confirmed_by = ?
-        UNION ALL SELECT 1 FROM stocktakes WHERE created_by = ? OR confirmed_by = ?
-        UNION ALL SELECT 1 FROM stock_movements WHERE created_by = ?
-        LIMIT 1
-        """,
+    activity_count = database.execute(
+        USER_ACTIVITY_COUNT_SQL,
         (user_id, user_id, user_id, user_id, user_id, user_id),
-    ).fetchone()
-    if has_activity:
+    ).fetchone()[0]
+    if activity_count:
         return error("Tài khoản đã có lịch sử nghiệp vụ; hãy chuyển sang trạng thái khóa.", 409)
     database.execute("DELETE FROM users WHERE id = ?", (user_id,))
     audit(
