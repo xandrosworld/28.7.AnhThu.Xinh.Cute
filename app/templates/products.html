@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Hàng hóa · DNP WMS{% endblock %}
+{% block topbar_title %}Danh mục hàng hóa{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><span class="eyebrow">DỮ LIỆU NỀN</span><h1>Hàng hóa</h1><p>Quản lý mã SKU, barcode, đơn vị và ngưỡng cảnh báo.</p></div>
+  {% if g.user['role'] in ['admin','manager','cs'] %}<button class="button primary" id="product-add" type="button">＋ Thêm hàng hóa</button>{% endif %}
+</div>
+<section class="panel">
+  <form class="filter-bar" id="product-filters">
+    <label class="search-field"><span class="sr-only">Tìm hàng hóa</span><input name="search" placeholder="Mã SKU, tên hoặc barcode…" autocomplete="off"></label>
+    <select name="category_id" aria-label="Danh mục"><option value="">Tất cả danh mục</option></select>
+    <select name="warehouse_id" aria-label="Kho"><option value="">Tất cả kho</option></select>
+    <button class="button secondary" type="reset">Đặt lại</button>
+  </form>
+  <div class="table-wrap"><table><thead><tr><th>SKU / Barcode</th><th>Tên hàng</th><th>Danh mục</th><th>Đơn vị</th><th>Kho / vị trí</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="product-body"></tbody></table></div>
+</section>
+{% endblock %}
+{% block modals %}
+<div class="modal-backdrop hidden" id="product-modal"><section class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
+  <div class="modal-header"><div><span class="eyebrow">HÀNG HÓA</span><h2 id="product-modal-title">Thêm hàng hóa</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+  <form id="product-form" novalidate><input type="hidden" name="id">
+    <div class="form-grid">
+      <div class="form-group"><label for="product-sku">Mã SKU *</label><input id="product-sku" name="sku" required maxlength="30"><small class="field-error" data-error-for="sku"></small></div>
+      <div class="form-group"><label for="product-barcode">Barcode</label><div class="input-action"><input id="product-barcode" name="barcode" maxlength="50"><button class="button secondary scan-trigger" type="button" data-target="product-barcode">Quét</button></div><small class="field-error" data-error-for="barcode"></small></div>
+      <div class="form-group span-full"><label for="product-name">Tên hàng *</label><input id="product-name" name="name" required maxlength="120"><small class="field-error" data-error-for="name"></small></div>
+      <div class="form-group"><label>Danh mục *</label><select name="category_id" required></select><small class="field-error" data-error-for="category_id"></small></div>
+      <div class="form-group"><label>Kho *</label><select name="warehouse_id" required></select><small class="field-error" data-error-for="warehouse_id"></small></div>
+      <div class="form-group"><label>Đơn vị tính *</label><input name="unit" required placeholder="Thùng, kiện, tấn…"><small class="field-error" data-error-for="unit"></small></div>
+      <div class="form-group"><label>Vị trí</label><input name="location" placeholder="A-01-01"></div>
+      <div class="form-group"><label>Ngưỡng cảnh báo</label><input name="min_quantity" type="number" min="0" value="10"></div>
+      <div class="form-group"><label>Trạng thái</label><select name="status"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></div>
+    </div>
+    <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu hàng hóa</button></div>
+  </form>
+</section></div>
+{% include "_scanner.html" %}
+{% endblock %}

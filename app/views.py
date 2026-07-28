@@ -79,3 +79,51 @@ def profile():
 @page_roles_required("admin")
 def audit_logs():
     return render_template("audit.html", page="audit")
+
+
+@bp.get("/products")
+@page_login_required
+def products():
+    return render_template("products.html", page="products")
+
+
+@bp.get("/customers")
+@page_login_required
+def customers():
+    return render_template("partners.html", page="customers", partner_type="customers")
+
+
+@bp.get("/suppliers")
+@page_login_required
+def suppliers():
+    return render_template("partners.html", page="suppliers", partner_type="suppliers")
+
+
+@bp.get("/warehouses")
+@page_login_required
+def warehouses():
+    return render_template("warehouses.html", page="warehouses")
+
+
+@bp.get("/inbound-receipts")
+@page_login_required
+def inbound_receipts():
+    return render_template("receipts.html", page="inbound", receipt_type="inbound")
+
+
+@bp.get("/outbound-receipts")
+@page_login_required
+def outbound_receipts():
+    return render_template("receipts.html", page="outbound", receipt_type="outbound")
+
+
+@bp.get("/stocktakes")
+@page_login_required
+def stocktakes():
+    return render_template("stocktakes.html", page="stocktakes")
+
+
+@bp.get("/reports")
+@page_login_required
+def reports():
+    return render_template("reports.html", page="reports")

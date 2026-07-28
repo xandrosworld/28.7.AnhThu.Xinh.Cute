@@ -4,7 +4,7 @@
 {% block content %}
 <div class="page-heading">
   <div><span class="eyebrow">DỮ LIỆU NỀN</span><h1>Danh mục hàng hóa</h1><p>Tổ chức nhóm hàng phục vụ tra cứu và báo cáo tồn kho.</p></div>
-  {% if g.user['role'] in ['admin', 'manager'] %}<button class="button primary" id="category-add" type="button">＋ Thêm danh mục</button>{% endif %}
+  {% if g.user['role'] in ['admin', 'manager', 'cs'] %}<button class="button primary" id="category-add" type="button">＋ Thêm danh mục</button>{% endif %}
 </div>
 <section class="panel">
   <div class="toolbar"><label class="search-field"><span class="sr-only">Tìm danh mục</span><input id="category-search" placeholder="Tìm mã hoặc tên danh mục…"></label><span class="count-pill" id="category-count">0 danh mục</span></div>

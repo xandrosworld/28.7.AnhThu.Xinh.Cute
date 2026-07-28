@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Kho hàng · DNP WMS{% endblock %}
+{% block topbar_title %}Danh sách kho hàng{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">MẠNG LƯỚI KHO</span><h1>Kho hàng</h1><p>Thông tin các kho và lượng hàng đang lưu trữ.</p></div></div>
+<section class="card-grid" id="warehouse-grid" aria-live="polite">{% for i in range(4) %}<article class="panel skeleton-block card-placeholder"></article>{% endfor %}</section>
+{% endblock %}

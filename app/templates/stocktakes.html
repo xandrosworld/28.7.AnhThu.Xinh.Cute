@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Kiểm kê · DNP WMS{% endblock %}
+{% block topbar_title %}Kiểm kê tồn kho{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">ĐỐI SOÁT TỒN KHO</span><h1>Phiếu kiểm kê</h1><p>Ghi nhận số đếm thực tế, chênh lệch và lý do điều chỉnh.</p></div>{% if g.user['role'] in ['admin','manager','warehouse'] %}<button class="button primary" id="stocktake-add" type="button">＋ Tạo phiếu kiểm kê</button>{% endif %}</div>
+<section class="panel"><div class="toolbar"><label class="search-field"><span class="sr-only">Tìm phiếu</span><input id="stocktake-search" placeholder="Tìm mã phiếu…"></label></div><div class="table-wrap"><table><thead><tr><th>Mã phiếu</th><th>Kho</th><th>Số mặt hàng</th><th>Chênh lệch</th><th>Trạng thái</th><th>Ngày tạo</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="stocktake-body"></tbody></table></div></section>
+{% endblock %}
+{% block modals %}
+<div class="modal-backdrop hidden" id="stocktake-modal"><section class="modal modal-xl" role="dialog" aria-modal="true" aria-labelledby="stocktake-title"><div class="modal-header"><div><span class="eyebrow">KIỂM KÊ</span><h2 id="stocktake-title">Tạo phiếu kiểm kê</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+<form id="stocktake-form" novalidate><div class="form-grid"><div class="form-group"><label>Mã phiếu *</label><input name="code" required placeholder="KK-2026-001"><small class="field-error" data-error-for="code"></small></div><div class="form-group"><label>Kho *</label><select name="warehouse_id" required><option value="">Chọn kho</option></select><small class="field-error" data-error-for="warehouse_id"></small></div><div class="form-group span-full"><label>Ghi chú</label><textarea name="note" rows="2"></textarea></div></div>
+<div class="line-items-header"><div><h3>Kết quả kiểm đếm</h3><p>Số hệ thống được lấy trực tiếp từ cơ sở dữ liệu.</p></div><button class="button secondary" id="stocktake-line-add" type="button">＋ Thêm hàng</button></div>
+<div class="table-wrap line-table"><table><thead><tr><th>Hàng hóa *</th><th>Tồn hệ thống</th><th>Thực đếm *</th><th>Lý do chênh lệch</th><th></th></tr></thead><tbody id="stocktake-line-body"></tbody></table></div><small class="field-error" data-error-for="items"></small>
+<div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu phiếu</button></div></form>
+</section></div>
+{% endblock %}

@@ -1,4 +1,5 @@
 import os
+import secrets
 
 from flask import Flask, jsonify, render_template, request
 
@@ -8,7 +9,7 @@ from . import db
 def create_app(test_config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_mapping(
-        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-me"),
+        SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
         DATABASE=os.path.join(app.instance_path, "dnp_wms.sqlite"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -38,9 +39,9 @@ def create_app(test_config=None):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+            "style-src 'self' 'unsafe-inline'; font-src 'self'; "
+            "img-src 'self' data: blob:; connect-src 'self'; "
+            "media-src 'self' blob:; frame-ancestors 'none'"
         )
         if request.path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
@@ -49,7 +50,8 @@ def create_app(test_config=None):
     @app.errorhandler(404)
     def not_found(error):
         if request.path.startswith("/api/"):
-            return jsonify(ok=False, message="Không tìm thấy tài nguyên."), 404
+            return jsonify(ok=False, message="Không tìm thấy tài nguyên.",
+                           error={"code": "not_found", "message": "Không tìm thấy tài nguyên.", "fields": {}}), 404
         return render_template(
             "error.html", code=404, message="Trang bạn tìm kiếm không tồn tại."
         ), 404
@@ -57,7 +59,8 @@ def create_app(test_config=None):
     @app.errorhandler(413)
     def payload_too_large(error):
         if request.path.startswith("/api/"):
-            return jsonify(ok=False, message="Dữ liệu gửi lên vượt quá giới hạn."), 413
+            return jsonify(ok=False, message="Dữ liệu gửi lên vượt quá giới hạn.",
+                           error={"code": "payload_too_large", "message": "Dữ liệu gửi lên vượt quá giới hạn.", "fields": {}}), 413
         return render_template(
             "error.html", code=413, message="Dữ liệu gửi lên vượt quá giới hạn."
         ), 413
@@ -65,7 +68,8 @@ def create_app(test_config=None):
     @app.errorhandler(500)
     def server_error(error):
         if request.path.startswith("/api/"):
-            return jsonify(ok=False, message="Hệ thống gặp lỗi. Vui lòng thử lại."), 500
+            return jsonify(ok=False, message="Hệ thống gặp lỗi. Vui lòng thử lại.",
+                           error={"code": "internal_error", "message": "Hệ thống gặp lỗi. Vui lòng thử lại.", "fields": {}}), 500
         return render_template(
             "error.html", code=500, message="Hệ thống gặp lỗi. Vui lòng thử lại."
         ), 500
