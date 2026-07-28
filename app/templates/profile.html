@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Hồ sơ cá nhân · DNP WMS{% endblock %}
+{% block topbar_title %}Hồ sơ cá nhân{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">TÀI KHOẢN CỦA TÔI</span><h1>Thông tin cá nhân</h1><p>Cập nhật thông tin liên hệ và bảo mật tài khoản.</p></div></div>
+<section class="profile-layout">
+  <article class="profile-card">
+    <div class="profile-avatar">{{ g.user['avatar_initials'] }}</div>
+    <h2>{{ g.user['full_name'] }}</h2><p>@{{ g.user['username'] }}</p>
+    <span class="badge info">{{ {'admin':'Quản trị viên','manager':'Quản lý kho','staff':'Nhân viên'}[g.user['role']] }}</span>
+    <div class="profile-facts"><div><small>TRẠNG THÁI</small><strong><span class="health-dot"></span> Đang hoạt động</strong></div><div><small>THÀNH VIÊN TỪ</small><strong>{{ g.user['created_at'][:10] }}</strong></div></div>
+  </article>
+  <div class="profile-forms">
+    <article class="panel">
+      <div class="panel-header"><div><h2>Thông tin liên hệ</h2><p>Tên đăng nhập và vai trò do quản trị viên kiểm soát.</p></div></div>
+      <form id="profile-form" novalidate>
+        <div class="form-grid">
+          <div class="form-group"><label for="profile-name">Họ và tên *</label><input id="profile-name" name="full_name" value="{{ g.user['full_name'] }}"><small class="field-error" data-error-for="full_name"></small></div>
+          <div class="form-group"><label for="profile-username">Tên đăng nhập</label><input id="profile-username" value="{{ g.user['username'] }}" disabled></div>
+          <div class="form-group"><label for="profile-email">Email *</label><input id="profile-email" name="email" type="email" value="{{ g.user['email'] }}"><small class="field-error" data-error-for="email"></small></div>
+          <div class="form-group"><label for="profile-phone">Số điện thoại</label><input id="profile-phone" name="phone" value="{{ g.user['phone'] }}"><small class="field-error" data-error-for="phone"></small></div>
+        </div>
+        <div class="form-actions"><button class="button primary" type="submit">Lưu thay đổi</button></div>
+      </form>
+    </article>
+    <article class="panel">
+      <div class="panel-header"><div><h2>Đổi mật khẩu</h2><p>Sử dụng ít nhất 8 ký tự, bao gồm chữ và số.</p></div></div>
+      <form id="password-form" novalidate>
+        <div class="form-group"><label for="current-password">Mật khẩu hiện tại *</label><input id="current-password" name="current_password" type="password" autocomplete="current-password"><small class="field-error" data-error-for="current_password"></small></div>
+        <div class="form-grid">
+          <div class="form-group"><label for="new-password">Mật khẩu mới *</label><input id="new-password" name="new_password" type="password" autocomplete="new-password"><small class="field-error" data-error-for="new_password"></small></div>
+          <div class="form-group"><label for="confirm-password">Xác nhận mật khẩu *</label><input id="confirm-password" name="confirm_password" type="password" autocomplete="new-password"><small class="field-error" data-error-for="confirm_password"></small></div>
+        </div>
+        <div class="form-actions"><button class="button primary" type="submit">Đổi mật khẩu</button></div>
+      </form>
+    </article>
+  </div>
+</section>
+{% endblock %}

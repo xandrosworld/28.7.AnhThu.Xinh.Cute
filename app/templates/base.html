@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1d4ed8">
+  <title>{% block title %}DNP WMS{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="{{ page|default('') }}" data-role="{{ g.user['role'] if g.user else '' }}">
+  <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="Điều hướng chính">
+      <a class="brand" href="{{ url_for('views.dashboard') }}">
+        <span class="brand-mark" aria-hidden="true">DN</span>
+        <span><strong>DNP Logistics</strong><small>Warehouse Management</small></span>
+      </a>
+      <nav class="nav-list">
+        <a class="nav-item {{ 'active' if page == 'dashboard' }}" href="{{ url_for('views.dashboard') }}">
+          <span aria-hidden="true">⌂</span> Tổng quan
+        </a>
+        <p class="nav-label">Quản lý kho</p>
+        <a class="nav-item {{ 'active' if page == 'inventory' }}" href="{{ url_for('views.inventory') }}">
+          <span aria-hidden="true">▦</span> Tồn kho
+        </a>
+        <a class="nav-item {{ 'active' if page == 'categories' }}" href="{{ url_for('views.categories') }}">
+          <span aria-hidden="true">◇</span> Danh mục
+        </a>
+        {% if g.user['role'] == 'admin' %}
+          <p class="nav-label">Quản trị</p>
+          <a class="nav-item {{ 'active' if page == 'users' }}" href="{{ url_for('views.users') }}">
+            <span aria-hidden="true">♙</span> Người dùng
+          </a>
+          <a class="nav-item {{ 'active' if page == 'audit' }}" href="{{ url_for('views.audit_logs') }}">
+            <span aria-hidden="true">≣</span> Nhật ký hệ thống
+          </a>
+        {% endif %}
+      </nav>
+      <div class="sidebar-footer">
+        <span class="health-dot" aria-hidden="true"></span>
+        <span><strong>Hệ thống hoạt động</strong><small>SQLite · Phiên bản 1.0</small></span>
+      </div>
+    </aside>
+
+    <div class="content-shell">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="menu-toggle" type="button" aria-label="Mở menu" aria-controls="sidebar" aria-expanded="false">☰</button>
+        <div class="topbar-copy">
+          <small>DNP LOGISTICS</small>
+          <strong>{% block topbar_title %}Quản lý kho hàng{% endblock %}</strong>
+        </div>
+        <div class="topbar-actions">
+          <a class="user-chip" href="{{ url_for('views.profile') }}">
+            <span class="avatar">{{ g.user['avatar_initials'] }}</span>
+            <span class="user-copy"><strong>{{ g.user['full_name'] }}</strong><small>{{ {'admin':'Quản trị viên','manager':'Quản lý kho','staff':'Nhân viên'}[g.user['role']] }}</small></span>
+          </a>
+          <button type="button" class="icon-button" id="logout-button" title="Đăng xuất" aria-label="Đăng xuất">↪</button>
+        </div>
+      </header>
+
+      <main class="main-content" id="main-content" tabindex="-1">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
+  </div>
+
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <div class="loading-overlay hidden" id="loading-overlay" aria-hidden="true">
+    <span class="spinner"></span><span>Đang xử lý…</span>
+  </div>
+  {% block modals %}{% endblock %}
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

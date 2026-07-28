@@ -1,0 +1,5 @@
+<!doctype html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ code }} · DNP WMS</title><link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}"></head>
+<body><main class="error-page"><div class="brand-mark">DN</div><span class="eyebrow">DNP LOGISTICS</span><h1>{{ code }}</h1><p>{{ message }}</p><a class="button primary" href="{{ url_for('views.dashboard') if g.user else url_for('views.login') }}">Quay lại hệ thống</a></main></body>
+</html>

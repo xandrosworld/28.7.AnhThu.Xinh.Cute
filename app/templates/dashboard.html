@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Tổng quan · DNP WMS{% endblock %}
+{% block topbar_title %}Tổng quan vận hành{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><span class="eyebrow">BẢNG ĐIỀU KHIỂN</span><h1>Chào {{ g.user['full_name'] }}</h1><p>Tổng quan nhanh tình trạng hàng hóa trong hệ thống.</p></div>
+  <div class="date-pill" id="today-label"></div>
+</div>
+<section class="stats-grid" id="dashboard-stats" aria-label="Chỉ số tồn kho">
+  {% for i in range(4) %}<article class="stat-card skeleton-block"></article>{% endfor %}
+</section>
+<section class="dashboard-grid">
+  <article class="panel span-two">
+    <div class="panel-header"><div><h2>Tồn kho theo danh mục</h2><p>Phân bổ tổng số lượng hiện có</p></div><a href="{{ url_for('views.inventory') }}">Xem tồn kho →</a></div>
+    <div class="bar-chart" id="category-chart"></div>
+  </article>
+  <article class="panel">
+    <div class="panel-header"><div><h2>Hoạt động gần đây</h2><p>Các lần điều chỉnh mới nhất</p></div></div>
+    <div class="activity-list" id="recent-activities"></div>
+  </article>
+</section>
+{% endblock %}

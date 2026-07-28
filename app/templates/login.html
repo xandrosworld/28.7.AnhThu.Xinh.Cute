@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập · DNP Logistics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="login">
+  <main class="login-page">
+    <section class="login-hero" aria-label="Giới thiệu DNP Logistics">
+      <div class="hero-orb hero-orb-one"></div><div class="hero-orb hero-orb-two"></div>
+      <div class="login-brand">
+        <span class="brand-mark">DN</span>
+        <span><strong>DNP Logistics</strong><small>QUẢN LÝ KHO HÀNG</small></span>
+      </div>
+      <div class="hero-copy">
+        <span class="eyebrow light">NỀN TẢNG QUẢN TRỊ TẬP TRUNG</span>
+        <h1>Vận hành kho hàng<br>chính xác và thông minh.</h1>
+        <p>Theo dõi tồn kho theo thời gian thực, kiểm soát truy cập và lưu vết mọi thay đổi trong một hệ thống an toàn.</p>
+        <div class="feature-grid">
+          <article><b>01</b><span><strong>Dữ liệu tập trung</strong><small>Không còn dữ liệu giả lập</small></span></article>
+          <article><b>02</b><span><strong>Kiểm soát rõ ràng</strong><small>Phân quyền theo vai trò</small></span></article>
+          <article><b>03</b><span><strong>Truy vết đầy đủ</strong><small>Nhật ký mọi điều chỉnh</small></span></article>
+        </div>
+      </div>
+      <p class="hero-footer">© 2026 DNP Logistics · Warehouse Management System</p>
+    </section>
+
+    <section class="login-panel">
+      <div class="login-card">
+        <div class="login-icon">⌂</div>
+        <span class="eyebrow">CHÀO MỪNG TRỞ LẠI</span>
+        <h2>Đăng nhập hệ thống</h2>
+        <p class="muted">Sử dụng tài khoản nội bộ để tiếp tục.</p>
+        <form id="login-form" novalidate>
+          <div class="form-group">
+            <label for="username">Tên đăng nhập</label>
+            <input id="username" name="username" autocomplete="username" placeholder="Nhập tên đăng nhập" autofocus>
+            <small class="field-error" data-error-for="username"></small>
+          </div>
+          <div class="form-group">
+            <label for="password">Mật khẩu</label>
+            <div class="password-wrap">
+              <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu">
+              <button type="button" class="password-toggle" aria-label="Hiện mật khẩu">Hiện</button>
+            </div>
+            <small class="field-error" data-error-for="password"></small>
+          </div>
+          <div class="login-note"><span>●</span> Phiên đăng nhập được bảo vệ trong 8 giờ</div>
+          <button class="button primary wide" type="submit"><span>Đăng nhập</span><span aria-hidden="true">→</span></button>
+          <p class="form-alert hidden" id="login-alert" role="alert"></p>
+        </form>
+        <details class="demo-accounts">
+          <summary>Tài khoản dùng thử</summary>
+          <p><b>Quản trị:</b> admin / Admin@123</p>
+          <p><b>Quản lý:</b> quanlykho / Kho@12345</p>
+          <p><b>Nhân viên:</b> nhanvien / NV@123456</p>
+        </details>
+      </div>
+    </section>
+  </main>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

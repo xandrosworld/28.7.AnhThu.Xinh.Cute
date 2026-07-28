@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Người dùng · DNP WMS{% endblock %}
+{% block topbar_title %}Quản lý người dùng{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><span class="eyebrow">QUẢN TRỊ HỆ THỐNG</span><h1>Người dùng và phân quyền</h1><p>Quản lý tài khoản theo nguyên tắc đúng người, đúng quyền.</p></div>
+  <button class="button primary" id="user-add" type="button">＋ Thêm người dùng</button>
+</div>
+<section class="panel">
+  <div class="toolbar"><label class="search-field"><span class="sr-only">Tìm người dùng</span><input id="user-search" placeholder="Tìm tên, tài khoản hoặc email…"></label><span class="count-pill" id="user-count">0 người dùng</span></div>
+  <div class="table-wrap">
+    <table><thead><tr><th>Người dùng</th><th>Liên hệ</th><th>Vai trò</th><th>Trạng thái</th><th>Ngày tạo</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="user-body"></tbody></table>
+  </div>
+</section>
+{% endblock %}
+{% block modals %}
+<div class="modal-backdrop hidden" id="user-modal">
+  <section class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
+    <div class="modal-header"><div><span class="eyebrow">TÀI KHOẢN</span><h2 id="user-modal-title">Thêm người dùng</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+    <form id="user-form" novalidate>
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="form-group"><label for="user-full-name">Họ và tên *</label><input id="user-full-name" name="full_name" maxlength="80"><small class="field-error" data-error-for="full_name"></small></div>
+        <div class="form-group"><label for="user-username">Tên đăng nhập *</label><input id="user-username" name="username" maxlength="30" autocomplete="off"><small class="field-error" data-error-for="username"></small></div>
+        <div class="form-group"><label for="user-email">Email *</label><input id="user-email" name="email" type="email"><small class="field-error" data-error-for="email"></small></div>
+        <div class="form-group"><label for="user-phone">Số điện thoại</label><input id="user-phone" name="phone" maxlength="20"><small class="field-error" data-error-for="phone"></small></div>
+        <div class="form-group"><label for="user-role">Vai trò *</label><select id="user-role" name="role"><option value="staff">Nhân viên</option><option value="manager">Quản lý kho</option><option value="admin">Quản trị viên</option></select><small class="field-error" data-error-for="role"></small></div>
+        <div class="form-group"><label for="user-status">Trạng thái</label><select id="user-status" name="status"><option value="active">Hoạt động</option><option value="locked">Đã khóa</option></select><small class="field-error" data-error-for="status"></small></div>
+      </div>
+      <div class="form-group"><label for="user-password">Mật khẩu <span id="password-required">*</span></label><input id="user-password" name="password" type="password" autocomplete="new-password" placeholder="Tối thiểu 8 ký tự"><small class="form-hint">Khi sửa, để trống nếu không muốn đổi mật khẩu.</small><small class="field-error" data-error-for="password"></small></div>
+      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu người dùng</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

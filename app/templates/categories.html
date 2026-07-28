@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Danh mục · DNP WMS{% endblock %}
+{% block topbar_title %}Quản lý danh mục{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><span class="eyebrow">DỮ LIỆU NỀN</span><h1>Danh mục hàng hóa</h1><p>Tổ chức nhóm hàng phục vụ tra cứu và báo cáo tồn kho.</p></div>
+  {% if g.user['role'] in ['admin', 'manager'] %}<button class="button primary" id="category-add" type="button">＋ Thêm danh mục</button>{% endif %}
+</div>
+<section class="panel">
+  <div class="toolbar"><label class="search-field"><span class="sr-only">Tìm danh mục</span><input id="category-search" placeholder="Tìm mã hoặc tên danh mục…"></label><span class="count-pill" id="category-count">0 danh mục</span></div>
+  <div class="table-wrap">
+    <table><thead><tr><th>Mã</th><th>Tên danh mục</th><th>Mô tả</th><th class="number">Hàng hóa</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="category-body"></tbody></table>
+  </div>
+</section>
+{% endblock %}
+{% block modals %}
+<div class="modal-backdrop hidden" id="category-modal">
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="category-modal-title">
+    <div class="modal-header"><div><span class="eyebrow">DANH MỤC</span><h2 id="category-modal-title">Thêm danh mục</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+    <form id="category-form" novalidate>
+      <input type="hidden" name="id">
+      <div class="form-grid">
+        <div class="form-group"><label for="category-code">Mã danh mục *</label><input id="category-code" name="code" maxlength="20" placeholder="VD: NVL"><small class="field-error" data-error-for="code"></small></div>
+        <div class="form-group"><label for="category-status">Trạng thái</label><select id="category-status" name="status"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select><small class="field-error" data-error-for="status"></small></div>
+      </div>
+      <div class="form-group"><label for="category-name">Tên danh mục *</label><input id="category-name" name="name" maxlength="80"><small class="field-error" data-error-for="name"></small></div>
+      <div class="form-group"><label for="category-description">Mô tả</label><textarea id="category-description" name="description" maxlength="300" rows="3"></textarea><small class="field-error" data-error-for="description"></small></div>
+      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu danh mục</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

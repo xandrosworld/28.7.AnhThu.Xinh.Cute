@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Nhật ký hệ thống · DNP WMS{% endblock %}
+{% block topbar_title %}Nhật ký hệ thống{% endblock %}
+{% block content %}
+<div class="page-heading"><div><span class="eyebrow">KIỂM SOÁT & TRUY VẾT</span><h1>Nhật ký hệ thống</h1><p>Theo dõi các thao tác quan trọng để đảm bảo tính minh bạch dữ liệu.</p></div></div>
+<section class="panel">
+  <div class="table-wrap"><table><thead><tr><th>Thời gian</th><th>Người thực hiện</th><th>Hành động</th><th>Đối tượng</th><th>Thông tin</th><th>IP</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+  <div class="pagination-row"><p id="audit-range"></p><nav class="pagination" id="audit-pagination" aria-label="Phân trang"></nav></div>
+</section>
+{% endblock %}
