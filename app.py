@@ -585,4 +585,4 @@ def add_audit(db, action, entity_type, entity_id, details):
 
 if __name__ == "__main__":
     application = create_app()
-    application.run(debug=True)
+    application.run(debug=os.environ.get("FLASK_DEBUG") == "1")
