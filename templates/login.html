@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Đăng nhập · DNP WMS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="login">
+  <main class="login-page">
+    <form id="login-form" class="panel login-card">
+      <p class="eyebrow">DNP Logistics</p>
+      <h1>Đăng nhập WMS</h1>
+      <p>Nhập tài khoản được phân quyền để tiếp tục.</p>
+      <label class="field"><span>Tên đăng nhập</span><input name="username" autocomplete="username" required autofocus></label>
+      <label class="field"><span>Mật khẩu</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+      <button class="button primary full" type="submit">Đăng nhập</button>
+      <small>Demo: admin / Admin@123 · cs / CS@12345 · warehouse / Kho@12345</small>
+    </form>
+  </main>
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+  <div id="loading" class="loading" hidden><span></span><p>Đang xử lý…</p></div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

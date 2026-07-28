@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Báo cáo nhập kho · DNP WMS{% endblock %}
 {% block content %}
-<div class="page-heading"><div><p class="eyebrow">Phân tích dữ liệu</p><h1>Báo cáo nhập kho</h1><p>Tổng hợp các phiếu đã hoàn tất theo khoảng thời gian.</p></div><a id="export-report" class="button secondary" href="#">⇩ Xuất CSV</a></div>
-<section class="panel"><form id="report-filters" class="filters"><label class="field"><span>Từ ngày</span><input name="start" type="date" required></label><label class="field"><span>Đến ngày</span><input name="end" type="date" required></label><button class="button primary" type="submit">Xem báo cáo</button></form></section>
+<div class="page-heading"><div><p class="eyebrow">Phân tích dữ liệu</p><h1>Báo cáo nhập kho</h1><p>Tổng hợp các phiếu đã hoàn tất theo khoảng thời gian.</p></div><a id="export-report" class="button secondary" href="/reports/export.csv">⇩ Xuất CSV</a></div>
+<section class="panel"><form id="report-filters" class="filters"><label class="field"><span>Từ ngày</span><input name="start" type="date" required></label><label class="field"><span>Đến ngày</span><input name="end" type="date" required></label><label class="field"><span>Kho</span><select name="warehouse"><option value="">Tất cả</option><option>Kho A</option><option>Kho B</option><option>Kho C</option></select></label><label class="field"><span>Nhà cung cấp</span><input name="supplier" maxlength="120" placeholder="Tất cả"></label><button class="button primary" type="submit">Xem báo cáo</button></form></section>
 <section class="kpi-grid report-kpis">
   <article class="kpi blue"><p>Phiếu hoàn tất</p><strong data-report="receipt_count">—</strong></article>
   <article class="kpi green"><p>Số lượng nhập</p><strong data-report="total_quantity">—</strong></article>

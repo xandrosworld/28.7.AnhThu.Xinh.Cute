@@ -2,10 +2,16 @@ import csv
 import io
 import json
 import os
+import secrets
 import sqlite3
 from datetime import date, datetime
+from functools import wraps
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
+import click
+from flask import (
+    Flask, Response, g, jsonify, redirect, render_template, request, session, url_for
+)
+from werkzeug.security import check_password_hash
 
 
 VALID_STATUSES = {"draft", "pending", "inspecting", "completed", "rejected"}
@@ -34,7 +40,10 @@ def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_mapping(
         DATABASE=os.path.join(app.instance_path, "wms.sqlite3"),
+        SECRET_KEY=os.environ.get("SECRET_KEY", "dev-only-change-this-key"),
         JSON_AS_ASCII=False,
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
     )
     if test_config:
         app.config.update(test_config)
@@ -48,6 +57,97 @@ def create_app(test_config=None):
 
     app.get_db = get_db
 
+    def json_error(message, status):
+        return jsonify(error=message), status
+
+    @app.before_request
+    def load_user_and_protect_csrf():
+        user_id = session.get("user_id")
+        with get_db() as db:
+            g.user = db.execute(
+                "SELECT id,username,full_name,role,status FROM users WHERE id=?", (user_id,)
+            ).fetchone() if user_id else None
+        if g.user and g.user["status"] != "active":
+            session.clear()
+            g.user = None
+        if (
+            request.path.startswith("/api/")
+            and request.method in {"POST", "PUT", "PATCH", "DELETE"}
+            and request.endpoint != "api_login"
+        ):
+            if g.user is None:
+                return json_error("Vui lòng đăng nhập.", 401)
+            supplied = request.headers.get("X-CSRF-Token", "")
+            expected = session.get("csrf_token", "")
+            if not expected or not secrets.compare_digest(supplied, expected):
+                return json_error("CSRF token không hợp lệ.", 403)
+
+    def login_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if g.user is None:
+                if request.path.startswith("/api/") or request.path.endswith(".csv"):
+                    return json_error("Vui lòng đăng nhập.", 401)
+                return redirect(url_for("login_page", next=request.full_path))
+            return view(*args, **kwargs)
+        return wrapped
+
+    def roles_required(*roles):
+        def decorator(view):
+            @wraps(view)
+            @login_required
+            def wrapped(*args, **kwargs):
+                if g.user["role"] not in roles:
+                    if request.path.startswith("/api/"):
+                        return json_error("Bạn không có quyền thực hiện thao tác này.", 403)
+                    return render_template(
+                        "error.html", title="Không có quyền",
+                        message="Tài khoản không có quyền truy cập trang này."
+                    ), 403
+                return view(*args, **kwargs)
+            return wrapped
+        return decorator
+
+    @app.get("/login")
+    def login_page():
+        if g.user:
+            return redirect(url_for("dashboard"))
+        return render_template("login.html", page="login")
+
+    @app.post("/api/auth/login")
+    def api_login():
+        data = request.get_json(silent=True) or {}
+        username = str(data.get("username", "")).strip()
+        password = str(data.get("password", ""))
+        if not username or not password:
+            return json_error("Tên đăng nhập và mật khẩu là bắt buộc.", 422)
+        with get_db() as db:
+            user = db.execute("SELECT * FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone()
+        if not user or not check_password_hash(user["password_hash"], password):
+            return json_error("Tên đăng nhập hoặc mật khẩu không đúng.", 401)
+        if user["status"] != "active":
+            return json_error("Tài khoản đã bị khóa.", 403)
+        session.clear()
+        session["user_id"] = user["id"]
+        session["csrf_token"] = secrets.token_urlsafe(32)
+        return jsonify(
+            user={key: user[key] for key in ("id", "username", "full_name", "role")},
+            csrf_token=session["csrf_token"],
+        )
+
+    @app.get("/api/auth/me")
+    @login_required
+    def api_me():
+        return jsonify(
+            user=dict(g.user), csrf_token=session.get("csrf_token")
+        )
+
+    @app.post("/api/auth/logout")
+    @login_required
+    def api_logout():
+        session.clear()
+        return jsonify(message="Đã đăng xuất.")
+
     @app.template_filter("number")
     def number_filter(value):
         return f"{float(value or 0):,.0f}".replace(",", ".")
@@ -55,6 +155,19 @@ def create_app(test_config=None):
     @app.context_processor
     def inject_globals():
         return {"today": date.today().isoformat()}
+
+    @app.after_request
+    def security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; font-src 'self'; frame-ancestors 'none'"
+        )
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.errorhandler(404)
     def not_found(_error):
@@ -74,47 +187,91 @@ def create_app(test_config=None):
         return redirect(url_for("dashboard"))
 
     @app.route("/dashboard")
+    @login_required
     def dashboard():
         return render_template("dashboard.html", active="dashboard", page="dashboard")
 
     @app.route("/receipts")
+    @login_required
     def receipts_page():
         return render_template("receipts.html", active="receipts", page="receipts")
 
     @app.route("/receipts/new")
+    @roles_required("ADMIN", "CS")
     def receipt_new():
         return render_template("receipt_form.html", active="receipts", page="receipt-form", receipt_id=None)
 
     @app.route("/receipts/<int:receipt_id>")
+    @login_required
     def receipt_detail(receipt_id):
         return render_template("receipt_detail.html", active="receipts", page="receipt-detail", receipt_id=receipt_id)
 
     @app.route("/receipts/<int:receipt_id>/edit")
+    @roles_required("ADMIN", "CS")
     def receipt_edit(receipt_id):
         return render_template("receipt_form.html", active="receipts", page="receipt-form", receipt_id=receipt_id)
 
     @app.route("/receipts/<int:receipt_id>/inspect")
+    @roles_required("ADMIN", "WAREHOUSE")
     def receipt_inspect(receipt_id):
         return render_template("inspection.html", active="receipts", page="inspection", receipt_id=receipt_id)
 
     @app.route("/history")
+    @login_required
     def history_page():
         return render_template("history.html", active="history", page="history")
 
     @app.route("/reports")
+    @login_required
     def reports_page():
         return render_template("reports.html", active="reports", page="reports")
 
     @app.get("/api/products")
+    @login_required
     def api_products():
         with get_db() as db:
             rows = db.execute(
-                "SELECT id, sku, name, category, unit, current_stock, min_stock, unit_price "
+                "SELECT id, sku, name, category, unit, barcode, current_stock, min_stock, unit_price "
                 "FROM products ORDER BY name"
             ).fetchall()
         return jsonify([dict(row) for row in rows])
 
+    @app.get("/api/master-data")
+    @login_required
+    def api_master_data():
+        with get_db() as db:
+            suppliers = db.execute(
+                "SELECT id,code,name FROM suppliers WHERE status='active' ORDER BY name"
+            ).fetchall()
+            warehouses = db.execute(
+                "SELECT id,code,name FROM warehouses WHERE status='active' ORDER BY name"
+            ).fetchall()
+        return jsonify(
+            suppliers=[dict(row) for row in suppliers],
+            warehouses=[dict(row) for row in warehouses],
+        )
+
+    @app.get("/api/inventory")
+    @login_required
+    def api_inventory():
+        q = request.args.get("q", "").strip()
+        params = []
+        where = ""
+        if q:
+            where = "WHERE p.sku LIKE ? OR p.name LIKE ? OR l.barcode LIKE ? OR l.pallet_id LIKE ?"
+            params = [f"%{q}%"] * 4
+        with get_db() as db:
+            rows = db.execute(
+                f"""SELECT l.id,p.sku,p.name,l.warehouse,l.pallet_id,l.barcode,l.unit,
+                           l.quantity,l.received_at,l.expiry_date
+                    FROM inventory_lots l JOIN products p ON p.id=l.product_id
+                    {where} ORDER BY l.received_at DESC,l.id DESC""",
+                params,
+            ).fetchall()
+        return jsonify([dict(row) for row in rows])
+
     @app.get("/api/dashboard")
+    @login_required
     def api_dashboard():
         with get_db() as db:
             total_products = db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
@@ -161,6 +318,7 @@ def create_app(test_config=None):
         )
 
     @app.get("/api/receipts")
+    @login_required
     def api_receipts():
         search = request.args.get("q", "").strip()
         status = request.args.get("status", "").strip()
@@ -196,9 +354,11 @@ def create_app(test_config=None):
         return jsonify([dict(row) for row in rows])
 
     @app.post("/api/receipts")
+    @roles_required("ADMIN", "CS")
     def api_receipt_create():
         data = request.get_json(silent=True) or {}
         errors = validate_receipt(data)
+        errors.extend(validate_receipt_master(get_db, data))
         if errors:
             return jsonify(error="; ".join(errors)), 400
         now = datetime.now().isoformat(timespec="seconds")
@@ -208,8 +368,9 @@ def create_app(test_config=None):
                 cursor = db.execute(
                     """
                     INSERT INTO receipts
-                    (code,supplier,warehouse,received_date,status,vehicle_no,container_no,note,created_at,updated_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)
+                    (code,supplier,warehouse,received_date,status,vehicle_no,container_no,seal_no,
+                     note,created_by,created_at,updated_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         code,
@@ -219,7 +380,9 @@ def create_app(test_config=None):
                         "pending",
                         data.get("vehicle_no", "").strip(),
                         data.get("container_no", "").strip(),
+                        data.get("seal_no", "").strip(),
                         data.get("note", "").strip(),
+                        g.user["id"],
                         now,
                         now,
                     ),
@@ -232,6 +395,7 @@ def create_app(test_config=None):
             return jsonify(error=f"Không thể tạo phiếu: {exc}"), 409
 
     @app.get("/api/receipts/<int:receipt_id>")
+    @login_required
     def api_receipt_detail(receipt_id):
         with get_db() as db:
             receipt = db.execute("SELECT * FROM receipts WHERE id=?", (receipt_id,)).fetchone()
@@ -239,7 +403,7 @@ def create_app(test_config=None):
                 return jsonify(error="Không tìm thấy phiếu nhập."), 404
             items = db.execute(
                 """
-                SELECT i.*, p.sku, p.name, p.unit, p.current_stock
+                SELECT i.*, p.sku, p.name, p.current_stock
                 FROM receipt_items i JOIN products p ON p.id=i.product_id
                 WHERE i.receipt_id=? ORDER BY i.id
                 """,
@@ -254,9 +418,11 @@ def create_app(test_config=None):
         return jsonify(result)
 
     @app.put("/api/receipts/<int:receipt_id>")
+    @roles_required("ADMIN", "CS")
     def api_receipt_update(receipt_id):
         data = request.get_json(silent=True) or {}
         errors = validate_receipt(data)
+        errors.extend(validate_receipt_master(get_db, data))
         if errors:
             return jsonify(error="; ".join(errors)), 400
         now = datetime.now().isoformat(timespec="seconds")
@@ -270,7 +436,7 @@ def create_app(test_config=None):
                 db.execute(
                     """
                     UPDATE receipts SET supplier=?,warehouse=?,received_date=?,vehicle_no=?,
-                    container_no=?,note=?,updated_at=? WHERE id=?
+                    container_no=?,seal_no=?,note=?,updated_at=? WHERE id=?
                     """,
                     (
                         data["supplier"].strip(),
@@ -278,6 +444,7 @@ def create_app(test_config=None):
                         data["received_date"],
                         data.get("vehicle_no", "").strip(),
                         data.get("container_no", "").strip(),
+                        data.get("seal_no", "").strip(),
                         data.get("note", "").strip(),
                         now,
                         receipt_id,
@@ -291,6 +458,7 @@ def create_app(test_config=None):
         return jsonify(message="Đã cập nhật phiếu nhập.")
 
     @app.delete("/api/receipts/<int:receipt_id>")
+    @roles_required("ADMIN", "CS")
     def api_receipt_delete(receipt_id):
         with get_db() as db:
             receipt = db.execute("SELECT * FROM receipts WHERE id=?", (receipt_id,)).fetchone()
@@ -304,6 +472,7 @@ def create_app(test_config=None):
         return jsonify(message="Đã xóa phiếu nhập.")
 
     @app.post("/api/receipts/<int:receipt_id>/inspection")
+    @roles_required("ADMIN", "WAREHOUSE")
     def api_inspection(receipt_id):
         data = request.get_json(silent=True) or {}
         checklist = data.get("checklist") or {}
@@ -316,6 +485,9 @@ def create_app(test_config=None):
         if result == "pass" and any(value == "fail" for value in checklist.values()):
             return jsonify(error="Không thể chọn Đạt khi checklist còn tiêu chí không đạt."), 400
         actual_quantities = data.get("actual_quantities") or {}
+        rejected_quantities = data.get("rejected_quantities") or {}
+        rejection_reasons = data.get("rejection_reasons") or {}
+        scanned_barcodes = data.get("scanned_barcodes") or {}
         now = datetime.now().isoformat(timespec="seconds")
         with get_db() as db:
             receipt = db.execute("SELECT * FROM receipts WHERE id=?", (receipt_id,)).fetchone()
@@ -323,22 +495,39 @@ def create_app(test_config=None):
                 return jsonify(error="Không tìm thấy phiếu nhập."), 404
             if receipt["status"] == "completed":
                 return jsonify(error="Phiếu đã hoàn tất."), 409
-            items = db.execute("SELECT id FROM receipt_items WHERE receipt_id=?", (receipt_id,)).fetchall()
+            items = db.execute(
+                "SELECT id,planned_qty,barcode FROM receipt_items WHERE receipt_id=?", (receipt_id,)
+            ).fetchall()
             for item in items:
                 raw = actual_quantities.get(str(item["id"]))
                 try:
                     qty = float(raw)
+                    rejected_qty = float(rejected_quantities.get(str(item["id"]), 0) or 0)
                 except (TypeError, ValueError):
-                    return jsonify(error="Số lượng thực nhập phải là số dương."), 400
-                if qty <= 0:
-                    return jsonify(error="Số lượng thực nhập phải lớn hơn 0."), 400
-                db.execute("UPDATE receipt_items SET actual_qty=? WHERE id=?", (qty, item["id"]))
+                    return jsonify(error="Số lượng chấp nhận/từ chối phải là số không âm."), 400
+                reason = str(rejection_reasons.get(str(item["id"]), "")).strip()
+                scanned = str(scanned_barcodes.get(str(item["id"]), "")).strip()
+                if qty < 0 or rejected_qty < 0 or qty + rejected_qty > item["planned_qty"]:
+                    return jsonify(error="Số lượng chấp nhận/từ chối không hợp lệ so với chứng từ."), 400
+                if rejected_qty > 0 and not reason:
+                    return jsonify(error="Phải nhập lý do cho số lượng bị từ chối."), 422
+                if result == "pass" and qty <= 0:
+                    return jsonify(error="Phiếu đạt phải có số lượng chấp nhận lớn hơn 0."), 422
+                if result == "pass" and scanned != item["barcode"]:
+                    return jsonify(error="Barcode quét không khớp hàng hóa trên chứng từ."), 422
+                db.execute(
+                    """UPDATE receipt_items
+                       SET actual_qty=?,rejected_qty=?,rejection_reason=? WHERE id=?""",
+                    (qty, rejected_qty, reason, item["id"]),
+                )
             db.execute(
                 """
-                INSERT INTO inspections(receipt_id,checklist_json,result,note,inspected_by,inspected_at)
-                VALUES(?,?,?,?,?,?)
+                INSERT INTO inspections
+                (receipt_id,checklist_json,result,note,inspected_by,inspected_by_user_id,inspected_at)
+                VALUES(?,?,?,?,?,?,?)
                 ON CONFLICT(receipt_id) DO UPDATE SET checklist_json=excluded.checklist_json,
                 result=excluded.result,note=excluded.note,inspected_by=excluded.inspected_by,
+                inspected_by_user_id=excluded.inspected_by_user_id,
                 inspected_at=excluded.inspected_at
                 """,
                 (
@@ -346,7 +535,8 @@ def create_app(test_config=None):
                     json.dumps(checklist, ensure_ascii=False),
                     result,
                     data.get("note", "").strip(),
-                    "Nguyễn Văn A",
+                    g.user["full_name"],
+                    g.user["id"],
                     now,
                 ),
             )
@@ -362,6 +552,7 @@ def create_app(test_config=None):
         return jsonify(message="Đã lưu kết quả kiểm tra.", status=next_status)
 
     @app.post("/api/receipts/<int:receipt_id>/complete")
+    @roles_required("ADMIN", "WAREHOUSE")
     def api_complete(receipt_id):
         now = datetime.now().isoformat(timespec="seconds")
         db = get_db()
@@ -409,9 +600,22 @@ def create_app(test_config=None):
                         now,
                     ),
                 )
+                db.execute(
+                    """INSERT INTO inventory_lots
+                       (product_id,receipt_item_id,warehouse,pallet_id,barcode,unit,
+                        quantity,received_at,expiry_date)
+                       VALUES(?,?,?,?,?,?,?,?,?)""",
+                    (
+                        item["product_id"], item["id"], receipt["warehouse"],
+                        item["pallet_id"], item["barcode"], item["unit"],
+                        item["actual_qty"], now, item["expiry_date"],
+                    ),
+                )
             db.execute(
-                "UPDATE receipts SET status='completed',completed_at=?,updated_at=? WHERE id=?",
-                (now, now, receipt_id),
+                """UPDATE receipts
+                   SET status='completed',completed_at=?,completed_by=?,updated_at=?
+                   WHERE id=?""",
+                (now, g.user["id"], now, receipt_id),
             )
             add_audit(db, "COMPLETE", "receipt", receipt_id, f"Hoàn tất nhập kho {receipt['code']}")
             db.commit()
@@ -423,6 +627,7 @@ def create_app(test_config=None):
         return jsonify(message="Hoàn tất nhập kho và cập nhật tồn kho.", already_completed=False)
 
     @app.get("/api/history")
+    @login_required
     def api_history():
         action = request.args.get("action", "").strip()
         q = request.args.get("q", "").strip()
@@ -441,40 +646,59 @@ def create_app(test_config=None):
         return jsonify([dict(row) for row in rows])
 
     @app.get("/api/reports")
+    @login_required
     def api_reports():
         start = request.args.get("start") or date.today().replace(day=1).isoformat()
         end = request.args.get("end") or date.today().isoformat()
+        warehouse = request.args.get("warehouse", "").strip()
+        supplier = request.args.get("supplier", "").strip()
+        try:
+            if date.fromisoformat(start) > date.fromisoformat(end):
+                raise ValueError
+        except ValueError:
+            return jsonify(error="Khoảng ngày báo cáo không hợp lệ."), 400
+        extra, filters = "", []
+        if warehouse:
+            extra += " AND r.warehouse=?"
+            filters.append(warehouse)
+        if supplier:
+            extra += " AND r.supplier LIKE ?"
+            filters.append(f"%{supplier}%")
+        params = (start, end, *filters)
         with get_db() as db:
             summary = db.execute(
-                """
+                f"""
                 SELECT COUNT(DISTINCT r.id) receipt_count,
                        COALESCE(SUM(i.actual_qty),0) total_quantity,
                        COALESCE(SUM(i.actual_qty*i.unit_price),0) total_value,
                        COUNT(DISTINCT r.supplier) supplier_count
                 FROM receipts r LEFT JOIN receipt_items i ON i.receipt_id=r.id
                 WHERE r.status='completed' AND date(r.completed_at) BETWEEN date(?) AND date(?)
+                {extra}
                 """,
-                (start, end),
+                params,
             ).fetchone()
             rows = db.execute(
-                """
+                f"""
                 SELECT r.code,r.supplier,r.warehouse,r.completed_at,
                        SUM(i.actual_qty) quantity,SUM(i.actual_qty*i.unit_price) value
                 FROM receipts r JOIN receipt_items i ON i.receipt_id=r.id
                 WHERE r.status='completed' AND date(r.completed_at) BETWEEN date(?) AND date(?)
+                {extra}
                 GROUP BY r.id ORDER BY r.completed_at DESC
                 """,
-                (start, end),
+                params,
             ).fetchall()
             top_products = db.execute(
-                """
+                f"""
                 SELECT p.sku,p.name,SUM(i.actual_qty) quantity,p.unit
                 FROM receipt_items i JOIN receipts r ON r.id=i.receipt_id
                 JOIN products p ON p.id=i.product_id
                 WHERE r.status='completed' AND date(r.completed_at) BETWEEN date(?) AND date(?)
+                {extra}
                 GROUP BY p.id ORDER BY quantity DESC LIMIT 5
                 """,
-                (start, end),
+                params,
             ).fetchall()
         return jsonify(
             start=start,
@@ -485,26 +709,44 @@ def create_app(test_config=None):
         )
 
     @app.get("/reports/export.csv")
+    @login_required
     def export_report():
         start = request.args.get("start") or "2000-01-01"
         end = request.args.get("end") or date.today().isoformat()
+        warehouse = request.args.get("warehouse", "").strip()
+        supplier = request.args.get("supplier", "").strip()
+        try:
+            if date.fromisoformat(start) > date.fromisoformat(end):
+                raise ValueError
+        except ValueError:
+            return jsonify(error="Khoảng ngày báo cáo không hợp lệ."), 400
+        extra, filters = "", []
+        if warehouse:
+            extra += " AND r.warehouse=?"
+            filters.append(warehouse)
+        if supplier:
+            extra += " AND r.supplier LIKE ?"
+            filters.append(f"%{supplier}%")
         with get_db() as db:
             rows = db.execute(
-                """
+                f"""
                 SELECT r.code,r.supplier,r.warehouse,r.completed_at,p.sku,p.name,
-                       i.actual_qty,p.unit,i.unit_price,(i.actual_qty*i.unit_price) value
+                       i.pallet_id,i.barcode,i.actual_qty,i.rejected_qty,i.unit,i.unit_price,
+                       (i.actual_qty*i.unit_price) value
                 FROM receipts r JOIN receipt_items i ON i.receipt_id=r.id
                 JOIN products p ON p.id=i.product_id
                 WHERE r.status='completed' AND date(r.completed_at) BETWEEN date(?) AND date(?)
+                {extra}
                 ORDER BY r.completed_at DESC,r.code,p.sku
                 """,
-                (start, end),
+                (start, end, *filters),
             ).fetchall()
         output = io.StringIO()
         output.write("\ufeff")
         writer = csv.writer(output)
         writer.writerow(
-            ["Mã phiếu", "Nhà cung cấp", "Kho", "Hoàn tất", "SKU", "Hàng hóa", "Số lượng", "ĐVT", "Đơn giá", "Thành tiền"]
+            ["Mã phiếu", "Nhà cung cấp", "Kho", "Hoàn tất", "SKU", "Hàng hóa",
+             "Pallet ID", "Barcode", "Chấp nhận", "Từ chối", "ĐVT", "Đơn giá", "Thành tiền"]
         )
         for row in rows:
             writer.writerow(list(row))
@@ -515,6 +757,46 @@ def create_app(test_config=None):
         )
 
     from database import init_database
+
+    @app.cli.command("init-db")
+    def init_db_command():
+        """Create missing schema and demonstration data without deleting existing rows."""
+        init_database(app.config["DATABASE"])
+        click.echo("Đã khởi tạo cơ sở dữ liệu WMS.")
+
+    @app.cli.command("backup-db")
+    @click.option("--destination", type=click.Path(dir_okay=False), default=None)
+    def backup_db_command(destination):
+        """Create a consistent SQLite backup using the online backup API."""
+        destination = destination or os.path.join(
+            app.instance_path, "backups", f"wms-{datetime.now():%Y%m%d-%H%M%S}.sqlite3"
+        )
+        os.makedirs(os.path.dirname(os.path.abspath(destination)), exist_ok=True)
+        source = sqlite3.connect(app.config["DATABASE"])
+        target = sqlite3.connect(destination)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+            source.close()
+        click.echo(f"Đã sao lưu: {destination}")
+
+    @app.cli.command("restore-db")
+    @click.option("--source", required=True, type=click.Path(exists=True, dir_okay=False))
+    def restore_db_command(source):
+        """Restore a valid SQLite backup into the configured database."""
+        source_db = sqlite3.connect(source)
+        try:
+            if source_db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise click.ClickException("File sao lưu không vượt qua kiểm tra toàn vẹn.")
+            target_db = sqlite3.connect(app.config["DATABASE"])
+            try:
+                source_db.backup(target_db)
+            finally:
+                target_db.close()
+        finally:
+            source_db.close()
+        click.echo(f"Đã phục hồi từ: {source}")
 
     init_database(app.config["DATABASE"])
     return app
@@ -534,6 +816,7 @@ def validate_receipt(data):
         errors.append("Phiếu nhập phải có ít nhất một mặt hàng")
         return errors
     seen = set()
+    seen_pallets = set()
     for index, item in enumerate(items, 1):
         try:
             product_id = int(item.get("product_id"))
@@ -545,6 +828,21 @@ def validate_receipt(data):
         if product_id in seen:
             errors.append(f"Dòng {index}: mặt hàng bị trùng")
         seen.add(product_id)
+        pallet_id = str(item.get("pallet_id", "")).strip().upper()
+        barcode = str(item.get("barcode", "")).strip()
+        if not pallet_id:
+            errors.append(f"Dòng {index}: pallet ID là bắt buộc")
+        elif pallet_id in seen_pallets:
+            errors.append(f"Dòng {index}: pallet ID bị trùng")
+        seen_pallets.add(pallet_id)
+        if not barcode:
+            errors.append(f"Dòng {index}: barcode là bắt buộc")
+        expiry_date = str(item.get("expiry_date", "")).strip()
+        if expiry_date:
+            try:
+                date.fromisoformat(expiry_date)
+            except ValueError:
+                errors.append(f"Dòng {index}: hạn sử dụng không đúng định dạng")
         if qty <= 0:
             errors.append(f"Dòng {index}: số lượng phải lớn hơn 0")
         if price < 0:
@@ -554,16 +852,49 @@ def validate_receipt(data):
 
 def save_items(db, receipt_id, items):
     for item in items:
+        product = db.execute(
+            "SELECT barcode,unit FROM products WHERE id=? AND 1=1", (int(item["product_id"]),)
+        ).fetchone()
+        if not product:
+            raise sqlite3.IntegrityError("product not found")
+        submitted_barcode = str(item.get("barcode", "")).strip()
+        if submitted_barcode != product["barcode"]:
+            raise sqlite3.IntegrityError("barcode does not match product")
         db.execute(
-            "INSERT INTO receipt_items(receipt_id,product_id,planned_qty,actual_qty,unit_price) VALUES(?,?,?,?,?)",
+            """INSERT INTO receipt_items
+               (receipt_id,product_id,planned_qty,actual_qty,rejected_qty,rejection_reason,
+                unit_price,pallet_id,barcode,unit,expiry_date)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 receipt_id,
                 int(item["product_id"]),
                 float(item["planned_qty"]),
                 None,
+                0,
+                "",
                 float(item.get("unit_price", 0)),
+                str(item["pallet_id"]).strip().upper(),
+                product["barcode"],
+                product["unit"],
+                str(item.get("expiry_date", "")).strip() or None,
             ),
         )
+
+
+def validate_receipt_master(get_db, data):
+    errors = []
+    supplier = str(data.get("supplier", "")).strip()
+    warehouse = str(data.get("warehouse", "")).strip()
+    with get_db() as db:
+        if supplier and not db.execute(
+            "SELECT 1 FROM suppliers WHERE name=? AND status='active'", (supplier,)
+        ).fetchone():
+            errors.append("Nhà cung cấp không tồn tại hoặc đã ngừng hoạt động")
+        if warehouse and not db.execute(
+            "SELECT 1 FROM warehouses WHERE name=? AND status='active'", (warehouse,)
+        ).fetchone():
+            errors.append("Kho không tồn tại hoặc đã ngừng hoạt động")
+    return errors
 
 
 def make_receipt_code(get_db):
@@ -577,9 +908,15 @@ def make_receipt_code(get_db):
 
 
 def add_audit(db, action, entity_type, entity_id, details):
+    actor_id = g.user["id"] if getattr(g, "user", None) else None
     db.execute(
-        "INSERT INTO audit_logs(action,entity_type,entity_id,details,created_at) VALUES(?,?,?,?,?)",
-        (action, entity_type, entity_id, details, datetime.now().isoformat(timespec="seconds")),
+        """INSERT INTO audit_logs
+           (action,entity_type,entity_id,actor_user_id,details,created_at)
+           VALUES(?,?,?,?,?,?)""",
+        (
+            action, entity_type, entity_id, actor_id, details,
+            datetime.now().isoformat(timespec="seconds"),
+        ),
     )
 
 

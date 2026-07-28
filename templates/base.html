@@ -4,10 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="description" content="Hệ thống quản lý nhập kho DNP Logistics">
+  <meta name="csrf-token" content="{{ session.get('csrf_token', '') }}">
   <title>{% block title %}DNP WMS{% endblock %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body data-page="{{ page|default('') }}" {% if receipt_id is defined and receipt_id %}data-receipt-id="{{ receipt_id }}"{% endif %}>
@@ -38,7 +36,8 @@
         </div>
         <div class="user">
           <span class="avatar">T</span>
-          <span><strong>Thanh Trúc</strong><small>Nhân viên kho</small></span>
+          <span><strong>{{ g.user.full_name }}</strong><small>{{ g.user.role }}</small></span>
+          <button id="logout-button" class="icon-button" type="button" title="Đăng xuất" aria-label="Đăng xuất">↪</button>
         </div>
       </header>
       <main id="main" class="content" tabindex="-1">{% block content %}{% endblock %}</main>

@@ -26,12 +26,17 @@ function loading(show) { $("#loading").hidden = !show; }
 async function api(path, options = {}) {
   loading(true);
   try {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
     const response = await fetch(path, {
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      headers: { "Content-Type": "application/json", ...(csrf ? { "X-CSRF-Token": csrf } : {}), ...(options.headers || {}) },
       ...options,
     });
     const isJson = response.headers.get("content-type")?.includes("json");
     const body = isJson ? await response.json() : await response.text();
+    if (response.status === 401 && document.body.dataset.page !== "login") {
+      location.href = `/login?next=${encodeURIComponent(location.pathname)}`;
+      throw new Error("Phiên đăng nhập đã hết hạn.");
+    }
     if (!response.ok) throw new Error(body.error || "Không thể xử lý yêu cầu.");
     return body;
   } catch (error) {
@@ -53,6 +58,30 @@ function initShell() {
   $("#global-search")?.addEventListener("keydown", event => {
     if (event.key === "Enter" && event.target.value.trim()) {
       location.href = `/receipts?q=${encodeURIComponent(event.target.value.trim())}`;
+    }
+  });
+  $("#logout-button")?.addEventListener("click", async () => {
+    await api("/api/auth/logout", { method: "POST", body: "{}" });
+    location.href = "/login";
+  });
+}
+
+function initLogin() {
+  const form = $("#login-form");
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const error = $("#login-error");
+    error.hidden = true;
+    try {
+      await api("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(Object.fromEntries(new FormData(form))),
+      });
+      const next = new URLSearchParams(location.search).get("next");
+      location.href = next && next.startsWith("/") ? next : "/dashboard";
+    } catch (reason) {
+      error.textContent = reason.message;
+      error.hidden = false;
     }
   });
 }
@@ -105,7 +134,8 @@ async function initReceipts() {
 async function initReceiptForm() {
   const form = $("#receipt-form");
   const receiptId = document.body.dataset.receiptId;
-  const products = await api("/api/products");
+  const [products, master] = await Promise.all([api("/api/products"), api("/api/master-data")]);
+  $("#supplier-options").innerHTML = master.suppliers.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.code)}</option>`).join("");
   const template = $("#item-template");
   function addItem(item = {}) {
     const fragment = template.content.cloneNode(true);
@@ -115,6 +145,9 @@ async function initReceiptForm() {
     select.value = item.product_id || "";
     $(".qty-input", row).value = item.planned_qty || 1;
     $(".price-input", row).value = item.unit_price ?? 0;
+    $(".pallet-input", row).value = item.pallet_id || "";
+    $(".barcode-input", row).value = item.barcode || "";
+    $(".expiry-input", row).value = item.expiry_date || "";
     updateRow(row);
     $("#item-rows").append(row);
   }
@@ -122,6 +155,7 @@ async function initReceiptForm() {
     const product = products.find(p => String(p.id) === $(".product-select", row).value);
     if (product) {
       $(".unit-cell", row).textContent = product.unit;
+      $(".barcode-input", row).value = product.barcode;
       if (!$(".price-input", row).value || Number($(".price-input", row).value) === 0) $(".price-input", row).value = product.unit_price;
     } else $(".unit-cell", row).textContent = "—";
     $(".line-total", row).textContent = money(Number($(".qty-input", row).value) * Number($(".price-input", row).value));
@@ -138,7 +172,7 @@ async function initReceiptForm() {
   });
   if (receiptId) {
     const receipt = await api(`/api/receipts/${receiptId}`);
-    for (const name of ["supplier", "warehouse", "vehicle_no", "container_no", "note"]) form.elements[name].value = receipt[name] || "";
+    for (const name of ["supplier", "warehouse", "vehicle_no", "container_no", "seal_no", "note"]) form.elements[name].value = receipt[name] || "";
     form.elements.received_date.value = receipt.received_date.slice(0, 16);
     receipt.items.forEach(addItem);
   } else {
@@ -153,6 +187,9 @@ async function initReceiptForm() {
       product_id: $(".product-select", row).value,
       planned_qty: $(".qty-input", row).value,
       unit_price: $(".price-input", row).value,
+      pallet_id: $(".pallet-input", row).value,
+      barcode: $(".barcode-input", row).value,
+      expiry_date: $(".expiry-input", row).value,
     }));
     if (new Set(items.map(item => item.product_id)).size !== items.length) return toast("Không được chọn trùng mặt hàng.", "error");
     const payload = Object.fromEntries(new FormData(form));
@@ -173,7 +210,7 @@ async function initReceiptDetail() {
   $("#detail-supplier").textContent = data.supplier; $("#detail-warehouse").textContent = data.warehouse;
   $("#detail-date").textContent = dateTime(data.received_date); $("#detail-status").innerHTML = statusBadge(data.status);
   $("#detail-vehicle").textContent = data.vehicle_no || "—"; $("#detail-container").textContent = data.container_no || "—";
-  $("#detail-items").innerHTML = data.items.map(item => `<tr><td><strong>${escapeHtml(item.sku)}</strong></td><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.unit)}</td><td>${number(item.planned_qty)}</td><td>${item.actual_qty ? number(item.actual_qty) : "—"}</td><td>${money(item.unit_price)}</td><td>${money((item.actual_qty || item.planned_qty) * item.unit_price)}</td></tr>`).join("");
+  $("#detail-items").innerHTML = data.items.map(item => `<tr><td><strong>${escapeHtml(item.sku)}</strong></td><td>${escapeHtml(item.name)}</td><td><strong>${escapeHtml(item.pallet_id)}</strong><small>${escapeHtml(item.barcode)}</small></td><td>${escapeHtml(item.unit)}</td><td>${number(item.planned_qty)}</td><td>${item.actual_qty != null ? number(item.actual_qty) : "—"}</td><td>${number(item.rejected_qty || 0)}${item.rejection_reason ? `<small>${escapeHtml(item.rejection_reason)}</small>` : ""}</td><td>${money(item.unit_price)}</td><td>${money((item.actual_qty ?? item.planned_qty) * item.unit_price)}</td></tr>`).join("");
   const inspectionText = data.inspection ? `\n\nKết quả kiểm tra: ${data.inspection.result === "pass" ? "Đạt" : "Không đạt"} · ${dateTime(data.inspection.inspected_at)}\n${data.inspection.note || "Không có biên bản bất thường."}` : "\n\nPhiếu chưa được kiểm tra.";
   $("#detail-note").textContent = (data.note || "Không có ghi chú chứng từ.") + inspectionText;
   $("#edit-link").href = `/receipts/${id}/edit`; $("#inspect-link").href = `/receipts/${id}/inspect`;
@@ -187,7 +224,18 @@ async function initInspection() {
   $("#inspection-code").textContent = `${data.code} · ${data.supplier}`;
   $("#transport-info").textContent = `${data.vehicle_no || "Chưa có biển số"} · ${data.container_no || "Không có container"}`;
   $("#inspection-summary").innerHTML = `<div><span>Kho nhận</span><strong>${escapeHtml(data.warehouse)}</strong></div><div><span>Ngày nhập</span><strong>${dateTime(data.received_date)}</strong></div>`;
-  $("#inspection-items").innerHTML = data.items.map(item => `<tr><td><strong>${escapeHtml(item.sku)}</strong></td><td>${escapeHtml(item.name)}</td><td>${number(item.planned_qty)} ${escapeHtml(item.unit)}</td><td><input class="actual-qty" data-item-id="${item.id}" type="number" min="0.01" step="0.01" required value="${item.actual_qty || item.planned_qty}" aria-label="Số lượng thực nhập ${escapeHtml(item.sku)}"></td></tr>`).join("");
+  $("#inspection-items").innerHTML = data.items.map(item => `<tr><td><strong>${escapeHtml(item.sku)}</strong><small>${escapeHtml(item.pallet_id)}</small></td><td>${escapeHtml(item.name)}</td><td><input class="scanned-barcode" data-item-id="${item.id}" required value="${escapeHtml(item.barcode)}" aria-label="Barcode quét ${escapeHtml(item.sku)}"><label class="button ghost"><span>Quét camera</span><input class="barcode-camera" data-item-id="${item.id}" type="file" accept="image/*" capture="environment" hidden></label></td><td>${number(item.planned_qty)} ${escapeHtml(item.unit)}</td><td><input class="actual-qty" data-item-id="${item.id}" type="number" min="0" max="${item.planned_qty}" step="0.01" required value="${item.actual_qty ?? item.planned_qty}" aria-label="Số lượng chấp nhận ${escapeHtml(item.sku)}"></td><td><input class="rejected-qty" data-item-id="${item.id}" type="number" min="0" max="${item.planned_qty}" step="0.01" value="${item.rejected_qty || 0}" aria-label="Số lượng từ chối ${escapeHtml(item.sku)}"></td><td><input class="rejection-reason" data-item-id="${item.id}" maxlength="250" value="${escapeHtml(item.rejection_reason || "")}" aria-label="Lý do từ chối ${escapeHtml(item.sku)}"></td></tr>`).join("");
+  $("#inspection-items").addEventListener("change", async event => {
+    if (!event.target.matches(".barcode-camera") || !event.target.files[0]) return;
+    if (!("BarcodeDetector" in window)) return toast("Trình duyệt chưa hỗ trợ camera barcode; hãy dùng máy quét USB hoặc nhập tay.", "error");
+    try {
+      const bitmap = await createImageBitmap(event.target.files[0]);
+      const codes = await new BarcodeDetector().detect(bitmap);
+      if (!codes.length) throw new Error("Không nhận diện được barcode.");
+      $(`.scanned-barcode[data-item-id="${event.target.dataset.itemId}"]`).value = codes[0].rawValue;
+      toast("Đã nhận diện barcode.");
+    } catch (error) { toast(error.message, "error"); }
+  });
   if (data.inspection) {
     Object.entries(data.inspection.checklist).forEach(([key, value]) => { const input = $(`input[name="${key}"][value="${value}"]`); if (input) input.checked = true; });
     $(`input[name="overall"][value="${data.inspection.result}"]`).checked = true;
@@ -206,7 +254,10 @@ async function initInspection() {
     const overall = $('input[name="overall"]:checked');
     if (!overall) throw new Error("Vui lòng chọn kết quả tổng thể.");
     const actual_quantities = Object.fromEntries($$(".actual-qty").map(input => [input.dataset.itemId, input.value]));
-    return api(`/api/receipts/${id}/inspection`, { method: "POST", body: JSON.stringify({ checklist, result: overall.value, note: form.elements.note.value, actual_quantities }) });
+    const rejected_quantities = Object.fromEntries($$(".rejected-qty").map(input => [input.dataset.itemId, input.value]));
+    const rejection_reasons = Object.fromEntries($$(".rejection-reason").map(input => [input.dataset.itemId, input.value]));
+    const scanned_barcodes = Object.fromEntries($$(".scanned-barcode").map(input => [input.dataset.itemId, input.value]));
+    return api(`/api/receipts/${id}/inspection`, { method: "POST", body: JSON.stringify({ checklist, result: overall.value, note: form.elements.note.value, actual_quantities, rejected_quantities, rejection_reasons, scanned_barcodes }) });
   }
   form.addEventListener("submit", async event => {
     event.preventDefault();
@@ -266,6 +317,7 @@ async function initReports() {
 document.addEventListener("DOMContentLoaded", async () => {
   initShell();
   const initializers = {
+    login: initLogin,
     dashboard: initDashboard, receipts: initReceipts, "receipt-form": initReceiptForm,
     "receipt-detail": initReceiptDetail, inspection: initInspection, history: initHistory, reports: initReports,
   };
