@@ -38,17 +38,18 @@ Kết quả xác minh cuối trên Python 3.12/SQLite: **78 test đạt, 1 test 
 SQL Server được skip; coverage toàn package `app` đạt 86,58%**, vượt ngưỡng
 CI 85%.
 
-Kết quả chính thức trên SQL Server 2022 + ODBC 18: **67 passed, 2 skipped** tại
-[GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
-SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`. Đây là baseline trước các
-migration/ràng buộc mới. Chỉ hai test backup/restore
-SQLite trong `tests/test_cli.py` bị skip; test concurrency dùng hai
-transaction/kết nối độc lập đã chạy và đạt. Cùng workflow, các job
-SQLite/Python 3.10 và 3.12 cũng thành công. Revision hiện tại chờ CI mới nên
-chưa kế thừa kết luận SQL Server này.
+Bằng chứng CI chính thức của bản nộp là
+[main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432),
+SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed`, **thành công 6/6 job**:
 
-Playwright hiện có 3 kịch bản, 2 browser và 3 viewport, tổng cộng **18
-project-cases**. Xác minh local bằng system Chrome đạt **9/9 Chromium cases**
-tại 1366/1024/390 px. Firefox local và cả hai job Playwright trên CI đang chờ
-chạy; AT-19 vì vậy mới đạt một phần. Lệnh cài/chạy chính xác nằm trong README.
-Camera thật, USB scanner và bản in vẫn cần biên bản thủ công riêng.
+- SQLite/Python 3.10: **78 passed, 1 skipped**.
+- SQLite/Python 3.12: **78 passed, 1 skipped**, coverage **86,58%**.
+- SQL Server 2022 + ODBC 18: **77 passed, 2 skipped**; chỉ hai test
+  backup/restore SQLite bị skip, test concurrency hai transaction đã đạt.
+- Playwright: **9/9 Chromium** và **9/9 Firefox** tại 1366/1024/390 px.
+- Benchmark CI: `report_csv` có P95/lớn nhất **63,46 ms**, verdict PASS,
+  thấp hơn ngưỡng 5 giây.
+
+Run tích hợp [30349830487](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349830487)
+trên cùng SHA cũng thành công 6/6. Camera thật, USB scanner và bản in vẫn cần
+biên bản thủ công riêng.

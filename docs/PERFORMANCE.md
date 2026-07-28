@@ -2,15 +2,30 @@
 
 ## Kết luận
 
-Benchmark độc lập ngày 28/07/2026 **đạt NFR-005** trong môi trường đo: tất cả
-request được đo đều dưới 5 giây. Request chậm nhất là xuất CSV 5.000 movement,
-với thời gian lớn nhất **71,778 ms**.
+Benchmark CI của bản nộp ngày 28/07/2026 **đạt NFR-005**: tất cả request được
+đo đều dưới 5 giây. Tác vụ chậm nhất là xuất CSV 5.000 movement, với P95 và
+thời gian lớn nhất **63,46 ms**, verdict **PASS**. Bằng chứng nằm trong
+[main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432)
+tại SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed`.
 
 Đây là benchmark phía server bằng Flask test client. Phép đo bao gồm routing,
 xác thực session, truy vấn SQLite, xử lý nghiệp vụ, serialization và tạo toàn
 bộ response; không bao gồm độ trễ mạng hoặc thời gian render của trình duyệt.
 
-## Môi trường và dữ liệu
+## Bằng chứng nghiệm thu CI
+
+| Thuộc tính | Kết quả |
+|---|---|
+| Workflow | Main run `30349831432`, thành công 6/6 job |
+| Commit | `ce80fafd52fbd5df4558aca18803276fdc9ccaed` |
+| Dataset | 1.012 sản phẩm, 5.010 lot/pallet, 5.000 stock movement |
+| Tác vụ chậm nhất | Xuất CSV 5.000 movement |
+| P95 / lớn nhất | 63,46 ms / 63,46 ms |
+| Ngưỡng / verdict | `< 5.000 ms` / PASS |
+
+Integration run `30349830487` trên cùng SHA cũng thành công 6/6.
+
+## Môi trường và dữ liệu local bổ sung
 
 | Thuộc tính | Giá trị đã đo |
 |---|---|
@@ -33,7 +48,7 @@ bộ response; không bao gồm độ trễ mạng hoặc thời gian render c�
 Database được tạo trong thư mục tạm và xóa sau khi chạy. Benchmark không đọc,
 ghi hoặc reset database demo của người dùng.
 
-## Kết quả
+## Kết quả local chi tiết
 
 | Tác vụ | Median | P95 | Lớn nhất | Response | Kết quả |
 |---|---:|---:|---:|---:|---|
@@ -45,8 +60,10 @@ ghi hoặc reset database demo của người dùng.
 | Báo cáo lọc kho/hàng/khách | 5,034 ms | 5,790 ms | 5,790 ms | 364 byte | Đạt |
 | Xuất CSV 5.000 movement | 48,695 ms | 71,778 ms | 71,778 ms | 470.073 byte | Đạt |
 
-Kết quả máy đọc đầy đủ, gồm bảy mẫu của từng endpoint, nằm tại
-[`performance_results.json`](performance_results.json).
+Kết quả máy đọc local đầy đủ, gồm bảy mẫu của từng endpoint, nằm tại
+[`performance_results.json`](performance_results.json). Số **71,778 ms** trong
+bảng trên là phép đo local bổ sung; kết luận nghiệm thu sử dụng benchmark CI
+**63,46 ms** tại SHA bản nộp.
 
 ## Chạy lại
 
@@ -75,9 +92,10 @@ Script từ chối dataset dưới 5.000 lot hoặc 5.000 movement và trả exi
 
 ## Giới hạn diễn giải
 
-- Kết quả chứng minh yêu cầu thời gian phản hồi trên SQLite và cấu hình máy đã
-  ghi; không phải cam kết throughput cho số người dùng đồng thời không giới hạn.
-- Chưa benchmark SQL Server thật trên máy này vì môi trường không có
-  Docker/SQL Server. Workflow CI vẫn kiểm tra migration và tính đúng đắn riêng.
+- Kết quả chứng minh yêu cầu thời gian phản hồi trên SQLite trong CI và cấu
+  hình local đã ghi; không phải cam kết throughput cho số người dùng đồng thời
+  không giới hạn.
+- Benchmark hiệu năng chạy trên SQLite; SQL Server CI kiểm tra migration và
+  tính đúng đắn riêng, không được diễn giải thành benchmark SQL Server.
 - Độ trễ mạng, reverse proxy và trình duyệt cần được đo lại nếu triển khai lên
   hạ tầng khác.

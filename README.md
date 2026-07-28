@@ -135,14 +135,13 @@ Không commit mật khẩu hoặc chuỗi kết nối thật. Xem thêm
 2022 riêng: job này tạo database thật, chạy migration/seed rồi chạy test qua
 ODBC 18; không giả lập bằng SQLite.
 
-Bằng chứng CI của baseline trước đợt mở rộng hiện tại:
-[run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
-trên commit `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**. Hai job
-SQLite/Python 3.10 và 3.12 đều xanh; job SQL Server 2022 + ODBC 18 đạt
-**67 passed, 2 skipped**. Hai test bị skip chỉ là backup/restore SQLite trong
-`tests/test_cli.py`; test cạnh tranh xác nhận xuất đã thực sự chạy và đạt trên
-SQL Server. Revision hiện tại có thêm migration/ràng buộc nên phải chờ workflow
-CI mới trước khi kế thừa kết luận SQL Server cho bản nộp cuối.
+Bằng chứng CI chính thức của bản nộp:
+[main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432)
+trên commit `ce80fafd52fbd5df4558aca18803276fdc9ccaed` đã **thành công 6/6 job**.
+SQLite/Python 3.10 và 3.12 đều đạt **78 passed, 1 skipped**; SQL Server 2022 +
+ODBC 18 đạt **77 passed, 2 skipped**. Hai skip trên SQL Server chỉ là
+backup/restore dành riêng cho SQLite; test cạnh tranh xác nhận xuất đã thực sự
+chạy và đạt trên SQL Server.
 
 ## Migration
 
@@ -194,11 +193,11 @@ Kết quả xác minh cục bộ cuối trên Python 3.12/SQLite:
 toàn package `app` đạt 86,58%**. Ngưỡng coverage là 85%; Playwright được tính
 riêng, không cộng vào số test pytest.
 
-Kết quả SQL Server CI của baseline tại
-[run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
-SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`: **67 passed, 2 skipped**;
+Kết quả SQL Server CI chính thức tại
+[main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432),
+SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed`: **77 passed, 2 skipped**;
 hai skip chỉ dành cho CLI backup/restore SQLite, còn test concurrency đã chạy
-và đạt. SQL Server CI cho revision hiện tại đang chờ chạy lại.
+và đạt.
 
 Bộ test bao phủ:
 
@@ -214,8 +213,8 @@ Bộ test bao phủ:
 
 Workflow `.github/workflows/ci.yml` cấu hình static/secret scan, benchmark,
 SQLite trên Python 3.10/3.12, Playwright Chromium/Firefox tại 1366/1024/390 px
-và SQL Server 2022 + ODBC 18. Chưa tuyên bố các job mới đạt cho tới khi có URL
-run và SHA xanh. Dự án không có job deploy.
+và SQL Server 2022 + ODBC 18. Cả 6/6 job đã đạt tại run và SHA nêu trên; dự án
+không có job deploy.
 
 ### Playwright E2E
 
@@ -244,9 +243,10 @@ npm run test:e2e -- --project=chromium-1366 --project=chromium-1024 --project=ch
 ```
 
 Suite hiện khai báo **18 project-cases**: 3 kịch bản × 2 browser × 3 viewport.
-Xác minh cục bộ bằng system Chrome đạt **9/9** trên Chromium tại
-1366/1024/390 px. Firefox và workflow Playwright CI của revision hiện tại đang
-chờ bằng chứng; không ghi “đạt” trước khi có run xanh.
+CI đạt **9/9 Chromium** và **9/9 Firefox** tại 1366/1024/390 px trong
+[main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432),
+SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed`. Xác minh bổ sung cục bộ bằng
+system Chrome cũng đạt 9/9 Chromium.
 
 ## API chính
 

@@ -27,8 +27,9 @@
    phiếu/picking list.
 7. **8:30–9:30 — Chất lượng:** chỉ ra 6 KPI dashboard; chạy
    `python -m pytest` và `npm run test:e2e:list`; mở benchmark, CI và ma trận
-   BR/NFR để truy vết yêu cầu tới test. Chỉ tuyên bố browser/CI đạt khi có run
-   xanh tương ứng.
+   BR/NFR để truy vết yêu cầu tới test. Mở
+   [main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432)
+   để chỉ ra 6/6 job xanh tại SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed`.
 8. **9:30–10:00 — Đóng góp:** hiển thị lịch sử ba nhánh và phân công trong
    `CONTRIBUTION.md`.
 
@@ -39,5 +40,5 @@
 - Nếu máy chấm không có SQL Server/ODBC, dùng SQLite để demo. Hỗ trợ SQL Server
   được chứng minh bằng job CI riêng.
 - Ứng dụng không cần Internet/CDN để chạy.
-- Nếu máy demo không có browser Playwright, dùng kết quả Chromium local 9/9
-  cùng HTTP smoke; Firefox vẫn ghi pending cho đến khi CI xanh.
+- Nếu máy demo không có browser Playwright, dùng bằng chứng CI đã đạt
+  Chromium 9/9 và Firefox 9/9 cùng HTTP smoke.

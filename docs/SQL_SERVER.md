@@ -26,24 +26,23 @@ Các lệnh chính xác được duy trì trong `README.md` và workflow CI đ�
 liệu lệch với code. Job SQL Server phải thực sự chạy migration và test; không
 được thay bằng SQLite dưới cùng tên job.
 
-## Bằng chứng CI baseline
+## Bằng chứng CI bản nộp
 
-[GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
-tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` là bằng chứng của
-**baseline trước migration hiện tại** và đã thành công:
+[Main run 30349831432](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432)
+tại SHA `ce80fafd52fbd5df4558aca18803276fdc9ccaed` đã **thành công 6/6 job**:
 
-- SQLite/Python 3.10: đạt.
-- SQLite/Python 3.12: đạt.
-- SQL Server 2022 + ODBC Driver 18: **67 passed, 2 skipped**.
+- SQLite/Python 3.10: **78 passed, 1 skipped**.
+- SQLite/Python 3.12: **78 passed, 1 skipped**, coverage **86,58%**.
+- SQL Server 2022 + ODBC Driver 18: **77 passed, 2 skipped**.
 - Hai skip chỉ là test CLI backup/restore dành riêng cho SQLite trong
   `tests/test_cli.py`.
 - Test cạnh tranh xác nhận xuất dùng hai transaction/kết nối độc lập đã chạy
   và đạt trên SQL Server thật.
+- Migration ràng buộc vai trò/đơn vị tính và inspection bắt buộc đã được áp
+  dụng thành công trước khi seed và chạy test.
 
-Revision hiện tại bổ sung migration ràng buộc vai trò/đơn vị tính và inspection
-bắt buộc, vì vậy phải chạy lại job SQL Server sau khi push. Không kế thừa trạng thái
-đạt của baseline cho revision mới; chỉ cập nhật tài liệu nghiệm thu khi có URL run
-và SHA tương ứng.
+[Integration run 30349830487](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349830487)
+trên cùng SHA cũng thành công 6/6.
 
 ## Backup và kiểm tra phục hồi
 

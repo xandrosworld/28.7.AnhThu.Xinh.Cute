@@ -2,11 +2,14 @@
 
 Usage after verification:
     python docs/generate_completion_report.py \
-        --test-result "78 passed, 1 SQL Server concurrency test skipped locally" \
+        --test-result "SQLite CI: 78 passed, 1 skipped trên Python 3.10 và 3.12" \
         --coverage "86.58%" \
-        --benchmark-max-ms "71.778" \
-        --sqlserver pending \
-        --browser chromium-local
+        --benchmark-max-ms "63.46" \
+        --sqlserver passed \
+        --sqlserver-result "77 passed, 2 SQLite-only skipped" \
+        --browser passed \
+        --ci-run-url "https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30349831432" \
+        --ci-sha "ce80fafd52fbd5df4558aca18803276fdc9ccaed"
 
 The result is always written under ``docs/``.  Test results are required so a
 stale or invented count cannot silently enter the submission report.
@@ -59,7 +62,7 @@ def parse_args():
     parser.add_argument(
         "--benchmark-max-ms",
         required=True,
-        help='Max thật từ performance_results.json, ví dụ "71.778"',
+        help='Max thật từ benchmark CI, ví dụ "63.46"',
     )
     parser.add_argument(
         "--sqlserver",
@@ -156,7 +159,7 @@ def main():
             "1366/1024/390 px; Firefox và CI pending"
         ),
         "passed": (
-            f"Chromium và Firefox CI đạt tại 1366/1024/390 px; "
+            f"Chromium 9/9 và Firefox 9/9 CI đạt tại 1366/1024/390 px; "
             f"{args.ci_run_url}, SHA {args.ci_sha}"
         ),
     }[args.browser]
@@ -183,7 +186,7 @@ def main():
         document,
         ("Hạng mục", "Kết quả"),
         (
-            ("Pytest trên máy xác minh", args.test_result),
+            ("Pytest SQLite", args.test_result),
             ("Coverage package app", args.coverage),
             (
                 "NFR-005 hiệu năng",
