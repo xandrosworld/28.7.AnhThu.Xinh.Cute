@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Kiểm tra nhập kho · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Kiểm soát chất lượng</p><h1>Kiểm tra nhập kho</h1><p id="inspection-code">Đang tải thông tin phiếu…</p></div>
+  <a class="button ghost" href="{{ url_for('receipt_detail', receipt_id=receipt_id) }}">← Chi tiết phiếu</a>
+</div>
+<form id="inspection-form" class="inspection-layout" novalidate>
+  <div class="form-stack">
+    <section class="panel"><div class="panel-header"><div><h2>Thông tin vận chuyển</h2><p id="transport-info">—</p></div></div><div id="inspection-summary" class="detail-summary compact"></div></section>
+    <section class="panel">
+      <div class="panel-header"><div><h2>Checklist kiểm soát</h2><p>Đánh giá đầy đủ từng tiêu chí</p></div><span id="check-progress" class="pill">0/7 tiêu chí</span></div>
+      <div id="checklist" class="checklist">
+        {% for key, title, desc in [
+          ('container','Tình trạng container','Không móp méo, thủng rách'),
+          ('seal','Niêm phong (Seal)','Đúng số và còn nguyên vẹn'),
+          ('goods','Tình trạng hàng hóa','Đúng chủng loại, nhãn mác'),
+          ('packaging','Bao bì','Không rách, ẩm hoặc biến dạng'),
+          ('barcode','Barcode / SKU','Quét được và khớp chứng từ'),
+          ('quantity','Số lượng','Khớp số lượng kiểm đếm'),
+          ('condition','Chất lượng tổng thể','Đủ tiêu chuẩn nhập kho')
+        ] %}
+        <fieldset class="check-row" data-key="{{ key }}"><legend><strong>{{ title }}</strong><small>{{ desc }}</small></legend>
+          <label><input type="radio" name="{{ key }}" value="pass"> Đạt</label><label><input type="radio" name="{{ key }}" value="fail"> Không đạt</label>
+        </fieldset>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="panel"><div class="panel-header"><div><h2>Số lượng thực nhập</h2><p>Kiểm đếm thực tế cho từng SKU</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Tên hàng</th><th>Dự kiến</th><th>Thực nhập <b class="required">*</b></th></tr></thead><tbody id="inspection-items"></tbody></table></div>
+    </section>
+  </div>
+  <aside class="form-stack">
+    <section class="panel sticky-panel"><div class="panel-header"><div><h2>Kết quả kiểm tra</h2><p>Xác nhận trước khi nhập kho</p></div></div>
+      <fieldset class="overall-result"><legend class="sr-only">Kết quả tổng thể</legend>
+        <label class="pass-card"><input type="radio" name="overall" value="pass"> <span><strong>✓ Đạt</strong><small>Đủ tiêu chuẩn nhập kho</small></span></label>
+        <label class="fail-card"><input type="radio" name="overall" value="fail"> <span><strong>× Không đạt</strong><small>Cần xử lý bất thường</small></span></label>
+      </fieldset>
+      <label class="field"><span>Biên bản / ghi chú</span><textarea name="note" rows="6" maxlength="1000" placeholder="Mô tả sai lệch hoặc tình trạng hàng…"></textarea></label>
+      <button class="button secondary full" type="submit">Lưu kết quả kiểm tra</button>
+      <button id="complete-receipt" class="button primary full" type="button">Hoàn tất & cộng tồn kho</button>
+      <p class="helper">Tồn kho chỉ được cộng một lần sau khi kết quả kiểm tra là Đạt.</p>
+    </section>
+  </aside>
+</form>
+{% endblock %}

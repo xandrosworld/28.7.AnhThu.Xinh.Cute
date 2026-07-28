@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Chi tiết phiếu nhập · DNP WMS{% endblock %}
+{% block content %}
+<div id="receipt-detail">
+  <div class="page-heading">
+    <div><p class="eyebrow">Chi tiết phiếu nhập</p><h1 id="detail-code">Đang tải…</h1><p id="detail-subtitle"></p></div>
+    <div class="button-row"><a class="button ghost" href="{{ url_for('receipts_page') }}">← Danh sách</a><a id="edit-link" class="button secondary" href="#">Chỉnh sửa</a><a id="inspect-link" class="button primary" href="#">Kiểm tra hàng</a></div>
+  </div>
+  <section class="detail-summary panel">
+    <div><span>Nhà cung cấp</span><strong id="detail-supplier">—</strong></div><div><span>Kho nhận</span><strong id="detail-warehouse">—</strong></div>
+    <div><span>Ngày nhập</span><strong id="detail-date">—</strong></div><div><span>Trạng thái</span><strong id="detail-status">—</strong></div>
+    <div><span>Biển số xe</span><strong id="detail-vehicle">—</strong></div><div><span>Container</span><strong id="detail-container">—</strong></div>
+  </section>
+  <section class="panel"><div class="panel-header"><div><h2>Danh sách hàng hóa</h2><p>Số lượng chứng từ và thực nhận</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Tên hàng</th><th>ĐVT</th><th>Dự kiến</th><th>Thực nhập</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead><tbody id="detail-items"></tbody></table></div>
+  </section>
+  <section class="panel"><div class="panel-header"><div><h2>Ghi chú & kết quả kiểm tra</h2></div></div><div id="detail-note" class="note-box">—</div></section>
+</div>
+{% endblock %}

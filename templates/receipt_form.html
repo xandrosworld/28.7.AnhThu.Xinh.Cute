@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Chỉnh sửa' if receipt_id else 'Tạo' }} phiếu nhập · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Quản lý nhập kho</p><h1>{{ 'Chỉnh sửa phiếu nhập' if receipt_id else 'Tạo phiếu nhập mới' }}</h1><p>Thông tin có dấu <b class="required">*</b> là bắt buộc.</p></div>
+  <a class="button ghost" href="{{ url_for('receipts_page') }}">← Quay lại</a>
+</div>
+<form id="receipt-form" class="form-stack" novalidate>
+  <section class="panel">
+    <div class="panel-header"><div><h2>Thông tin phiếu</h2><p>Chứng từ và phương tiện vận chuyển</p></div></div>
+    <div class="form-grid">
+      <label class="field"><span>Nhà cung cấp <b class="required">*</b></span><input name="supplier" required maxlength="120" placeholder="Ví dụ: Công ty Thép Đông Á"></label>
+      <label class="field"><span>Kho nhận <b class="required">*</b></span><select name="warehouse" required><option value="">Chọn kho</option><option>Kho A</option><option>Kho B</option><option>Kho C</option></select></label>
+      <label class="field"><span>Ngày giờ nhập <b class="required">*</b></span><input name="received_date" type="datetime-local" required></label>
+      <label class="field"><span>Biển số xe</span><input name="vehicle_no" maxlength="20" placeholder="43C-123.45"></label>
+      <label class="field"><span>Số container</span><input name="container_no" maxlength="30" placeholder="TCNU8291024"></label>
+      <label class="field span-2"><span>Ghi chú</span><textarea name="note" rows="3" maxlength="500" placeholder="Ghi chú vận chuyển, thời gian giao nhận…"></textarea></label>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-header"><div><h2>Chi tiết hàng hóa</h2><p>Mỗi mặt hàng chỉ xuất hiện một lần</p></div><button id="add-item" class="button secondary" type="button">＋ Thêm dòng</button></div>
+    <div class="table-wrap">
+      <table class="editable-table"><thead><tr><th>Hàng hóa <b class="required">*</b></th><th>ĐVT</th><th>Số lượng dự kiến</th><th>Đơn giá (₫)</th><th>Thành tiền</th><th></th></tr></thead><tbody id="item-rows"></tbody></table>
+    </div>
+    <div class="form-total"><span>Tổng giá trị dự kiến</span><strong id="grand-total">0 ₫</strong></div>
+  </section>
+  <div class="form-actions"><a class="button ghost" href="{{ url_for('receipts_page') }}">Hủy</a><button class="button primary" type="submit">Lưu phiếu nhập</button></div>
+</form>
+<template id="item-template"><tr>
+  <td><select class="product-select" required><option value="">Chọn mặt hàng</option></select></td>
+  <td class="unit-cell">—</td>
+  <td><input class="qty-input" type="number" min="0.01" step="0.01" required value="1"></td>
+  <td><input class="price-input" type="number" min="0" step="1000" required value="0"></td>
+  <td class="line-total">0 ₫</td>
+  <td><button class="icon-button danger remove-item" type="button" aria-label="Xóa dòng">×</button></td>
+</tr></template>
+{% endblock %}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Hệ thống quản lý nhập kho DNP Logistics">
+  <title>{% block title %}DNP WMS{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="{{ page|default('') }}" {% if receipt_id is defined and receipt_id %}data-receipt-id="{{ receipt_id }}"{% endif %}>
+  <a class="skip-link" href="#main">Bỏ qua menu</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="{{ url_for('dashboard') }}">
+        <span class="brand-mark">D</span>
+        <span><strong>DNP Logistics</strong><small>Quản lý kho nội địa</small></span>
+      </a>
+      <nav aria-label="Điều hướng chính">
+        <a class="{{ 'active' if active == 'dashboard' }}" href="{{ url_for('dashboard') }}"><span>▦</span>Bảng điều khiển</a>
+        <a class="{{ 'active' if active == 'receipts' }}" href="{{ url_for('receipts_page') }}"><span>↓</span>Quản lý nhập kho</a>
+        <a class="{{ 'active' if active == 'history' }}" href="{{ url_for('history_page') }}"><span>↻</span>Lịch sử hoạt động</a>
+        <a class="{{ 'active' if active == 'reports' }}" href="{{ url_for('reports_page') }}"><span>▥</span>Báo cáo & thống kê</a>
+      </nav>
+      <div class="sidebar-note">
+        <strong>Phân hệ Thanh Trúc</strong>
+        <span>Nhập kho • Kiểm tra • Báo cáo</span>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <button class="icon-button menu-toggle" id="menu-toggle" aria-controls="sidebar" aria-expanded="false" aria-label="Mở menu">☰</button>
+        <div class="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input id="global-search" type="search" placeholder="Tìm mã phiếu, nhà cung cấp…" aria-label="Tìm nhanh phiếu nhập">
+        </div>
+        <div class="user">
+          <span class="avatar">T</span>
+          <span><strong>Thanh Trúc</strong><small>Nhân viên kho</small></span>
+        </div>
+      </header>
+      <main id="main" class="content" tabindex="-1">{% block content %}{% endblock %}</main>
+      <footer class="site-footer">DNP WMS · Dữ liệu lưu bằng SQLite · Phiên bản bài tập 2026</footer>
+    </div>
+  </div>
+  <div id="toast-region" class="toast-region" role="status" aria-live="polite"></div>
+  <div id="loading" class="loading" hidden><span></span><p>Đang xử lý…</p></div>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

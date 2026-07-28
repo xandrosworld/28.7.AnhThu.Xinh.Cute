@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo nhập kho · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Phân tích dữ liệu</p><h1>Báo cáo nhập kho</h1><p>Tổng hợp các phiếu đã hoàn tất theo khoảng thời gian.</p></div><a id="export-report" class="button secondary" href="#">⇩ Xuất CSV</a></div>
+<section class="panel"><form id="report-filters" class="filters"><label class="field"><span>Từ ngày</span><input name="start" type="date" required></label><label class="field"><span>Đến ngày</span><input name="end" type="date" required></label><button class="button primary" type="submit">Xem báo cáo</button></form></section>
+<section class="kpi-grid report-kpis">
+  <article class="kpi blue"><p>Phiếu hoàn tất</p><strong data-report="receipt_count">—</strong></article>
+  <article class="kpi green"><p>Số lượng nhập</p><strong data-report="total_quantity">—</strong></article>
+  <article class="kpi violet"><p>Tổng giá trị</p><strong data-report="total_value">—</strong></article>
+  <article class="kpi amber"><p>Nhà cung cấp</p><strong data-report="supplier_count">—</strong></article>
+</section>
+<div class="report-grid">
+  <section class="panel span-2"><div class="panel-header"><div><h2>Chi tiết phiếu hoàn tất</h2><p id="report-period"></p></div></div><div class="table-wrap"><table><thead><tr><th>Mã phiếu</th><th>Nhà cung cấp</th><th>Kho</th><th>Hoàn tất</th><th>Số lượng</th><th>Giá trị</th></tr></thead><tbody id="report-rows"></tbody></table></div><p id="report-empty" class="empty" hidden>Không có dữ liệu trong khoảng đã chọn.</p></section>
+  <section class="panel"><div class="panel-header"><div><h2>Top hàng nhập</h2><p>Theo số lượng thực nhập</p></div></div><ol id="top-products" class="ranking"></ol></section>
+</div>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Bảng điều khiển · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Tổng quan vận hành</p><h1>Bảng điều khiển</h1><p>Theo dõi tình hình nhập kho theo dữ liệu thời gian thực.</p></div>
+  <a class="button primary" href="{{ url_for('receipt_new') }}">＋ Tạo phiếu nhập</a>
+</div>
+<section class="kpi-grid" aria-label="Chỉ số tổng quan">
+  <article class="kpi blue"><span class="kpi-icon">▦</span><p>Mặt hàng quản lý</p><strong data-kpi="total_products">—</strong><small>SKU trong danh mục</small></article>
+  <article class="kpi green"><span class="kpi-icon">↓</span><p>Phiếu nhập hôm nay</p><strong data-kpi="today_receipts">—</strong><small>Phát sinh trong ngày</small></article>
+  <article class="kpi violet"><span class="kpi-icon">✓</span><p>Phiếu hoàn tất</p><strong data-kpi="completed">—</strong><small>Đã cộng tồn kho</small></article>
+  <article class="kpi amber"><span class="kpi-icon">◷</span><p>Đang xử lý</p><strong data-kpi="pending">—</strong><small>Chờ kiểm tra/hoàn tất</small></article>
+  <article class="kpi red"><span class="kpi-icon">!</span><p>Sắp hết tồn</p><strong data-kpi="low_stock">—</strong><small>Chạm ngưỡng cảnh báo</small></article>
+  <article class="kpi cyan"><span class="kpi-icon">▤</span><p>Tổng tồn hiện tại</p><strong data-kpi="stock">—</strong><small>Đơn vị hàng hóa</small></article>
+</section>
+<div class="dashboard-grid">
+  <section class="panel span-2">
+    <div class="panel-header"><div><h2>Nhập kho 6 tháng gần nhất</h2><p>Số lượng thực nhập đã hoàn tất</p></div></div>
+    <div id="monthly-chart" class="bar-chart" aria-label="Biểu đồ số lượng nhập kho"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-header"><div><h2>Cơ cấu tồn kho</h2><p>Theo nhóm sản phẩm</p></div></div>
+    <div id="category-chart" class="category-chart"></div>
+  </section>
+  <section class="panel span-2">
+    <div class="panel-header"><div><h2>Hoạt động gần đây</h2><p>Nhật ký có thể truy vết</p></div><a href="{{ url_for('history_page') }}">Xem tất cả →</a></div>
+    <ol id="activity-list" class="timeline"></ol>
+  </section>
+  <section class="panel">
+    <div class="panel-header"><div><h2>Cảnh báo tồn kho</h2><p>Cần lên kế hoạch bổ sung</p></div></div>
+    <div id="stock-alerts" class="alert-list"></div>
+  </section>
+</div>
+{% endblock %}

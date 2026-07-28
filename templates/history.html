@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Lịch sử hoạt động · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">Truy vết hệ thống</p><h1>Lịch sử hoạt động</h1><p>Nhật ký tạo, sửa, kiểm tra và hoàn tất phiếu nhập.</p></div></div>
+<section class="panel">
+  <form id="history-filters" class="filters"><label class="field grow"><span>Từ khóa</span><input name="q" type="search" placeholder="Nội dung hoạt động…"></label>
+    <label class="field"><span>Loại thao tác</span><select name="action"><option value="">Tất cả</option><option>CREATE</option><option>UPDATE</option><option>INSPECT</option><option>COMPLETE</option><option>DELETE</option></select></label>
+    <button class="button secondary" type="submit">Lọc</button></form>
+  <ol id="history-list" class="history-list"></ol><p id="history-empty" class="empty" hidden>Chưa có hoạt động phù hợp.</p>
+</section>
+{% endblock %}

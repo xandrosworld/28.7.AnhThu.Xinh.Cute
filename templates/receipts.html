@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Danh sách phiếu nhập · DNP WMS{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><p class="eyebrow">Quản lý nhập kho</p><h1>Danh sách phiếu nhập</h1><p>Tạo, kiểm tra và theo dõi toàn bộ phiếu nhập kho.</p></div>
+  <a class="button primary" href="{{ url_for('receipt_new') }}">＋ Tạo phiếu nhập</a>
+</div>
+<section class="panel">
+  <form id="receipt-filters" class="filters" role="search">
+    <label class="field grow"><span>Tìm kiếm</span><input name="q" type="search" placeholder="Mã phiếu, nhà cung cấp, kho…"></label>
+    <label class="field"><span>Trạng thái</span><select name="status">
+      <option value="">Tất cả</option><option value="pending">Chờ kiểm tra</option><option value="inspecting">Đã kiểm tra</option>
+      <option value="completed">Hoàn tất</option><option value="rejected">Không đạt</option>
+    </select></label>
+    <button class="button secondary" type="submit">Lọc dữ liệu</button>
+    <button class="button ghost" type="reset">Đặt lại</button>
+  </form>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Mã phiếu</th><th>Nhà cung cấp</th><th>Kho</th><th>Ngày nhập</th><th>Số dòng</th><th>Tổng SL</th><th>Trạng thái</th><th class="actions">Thao tác</th></tr></thead>
+      <tbody id="receipt-rows"></tbody>
+    </table>
+  </div>
+  <p id="receipt-empty" class="empty" hidden>Không tìm thấy phiếu nhập phù hợp.</p>
+</section>
+{% endblock %}
