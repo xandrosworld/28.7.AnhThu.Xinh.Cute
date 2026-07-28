@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Quản lý hàng hóa · DNP Logistics{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">KHO HÀNG / HÀNG HÓA</p><h1>Quản lý hàng hóa</h1><p>Tra cứu, phân loại và kiểm soát tồn kho theo thời gian thực.</p></div>
+  <a class="btn primary" href="{{ url_for('page_2') }}">＋ Thêm hàng hóa</a>
+</section>
+<section class="stats-grid" id="product-stats" aria-label="Thống kê hàng hóa">
+  <article class="stat-card"><span class="stat-icon blue">▣</span><div><b data-stat="total">—</b><small>Tổng hàng hóa</small></div></article>
+  <article class="stat-card"><span class="stat-icon green">✓</span><div><b data-stat="in_stock">—</b><small>Còn hàng</small></div></article>
+  <article class="stat-card"><span class="stat-icon amber">!</span><div><b data-stat="low_stock">—</b><small>Sắp hết</small></div></article>
+  <article class="stat-card"><span class="stat-icon red">×</span><div><b data-stat="out_of_stock">—</b><small>Hết hàng</small></div></article>
+  <article class="stat-card"><span class="stat-icon violet">◇</span><div><b data-stat="category_count">—</b><small>Danh mục</small></div></article>
+</section>
+<section class="panel">
+  <form class="filters" id="product-filters">
+    <label>Từ khóa<input name="q" type="search" placeholder="SKU, barcode, tên hàng..."></label>
+    <label>Danh mục<select name="category_id" id="category-filter"><option value="">Tất cả danh mục</option></select></label>
+    <label>Trạng thái<select name="status"><option value="">Tất cả trạng thái</option><option value="in_stock">Còn hàng</option><option value="low_stock">Sắp hết</option><option value="out_of_stock">Hết hàng</option></select></label>
+    <button class="btn primary" type="submit">Tìm kiếm</button>
+    <button class="btn" type="reset">Đặt lại</button>
+  </form>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>SKU / BARCODE</th><th>SẢN PHẨM</th><th>DANH MỤC</th><th>VỊ TRÍ</th><th>SỐ LƯỢNG</th><th>ĐƠN GIÁ</th><th>TRẠNG THÁI</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+      <tbody id="product-rows"><tr><td colspan="8" class="empty">Đang tải dữ liệu…</td></tr></tbody>
+    </table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</section>
+<details class="panel category-manager">
+  <summary><b>Quản lý danh mục hàng hóa</b><span>Thêm, sửa hoặc xóa danh mục chưa được sử dụng</span></summary>
+  <div class="category-layout">
+    <form id="category-form" class="compact-form" novalidate>
+      <input type="hidden" name="id">
+      <label>Mã danh mục<input name="code" required maxlength="20" placeholder="VD: FOD"></label>
+      <label>Tên danh mục<input name="name" required maxlength="80" placeholder="VD: Thực phẩm"></label>
+      <label>Mô tả<textarea name="description" maxlength="255" rows="3"></textarea></label>
+      <div class="form-actions"><button class="btn" type="button" data-cancel-category>Hủy sửa</button><button class="btn primary" type="submit">Thêm danh mục</button></div>
+    </form>
+    <div class="table-scroll"><table><thead><tr><th>MÃ</th><th>TÊN DANH MỤC</th><th>SỬ DỤNG</th><th></th></tr></thead><tbody id="category-list"></tbody></table></div>
+  </div>
+</details>
+{% endblock %}

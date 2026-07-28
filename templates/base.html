@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Phân hệ quản lý hàng hóa và xuất kho DNP Logistics">
+  <title>{% block title %}DNP Logistics WMS{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body data-page="{{ page }}" data-id="{{ item_id or '' }}">
+  <a class="skip-link" href="#main-content">Bỏ qua điều hướng</a>
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="{{ url_for('page_1') }}" aria-label="DNP Logistics - Hàng hóa">
+        <span class="brand-mark">DNP</span>
+        <span><b>DNP Logistics</b><small>QUẢN LÝ KHO HÀNG</small></span>
+      </a>
+      <p class="nav-label">NGHIỆP VỤ</p>
+      <nav aria-label="Điều hướng chính">
+        <a class="nav-item {{ 'active' if page.startswith('product') else '' }}" href="{{ url_for('page_1') }}">
+          <span>▣</span> Hàng hóa
+        </a>
+        <a class="nav-item {{ 'active' if page.startswith('order') or page == 'inspection' else '' }}" href="{{ url_for('page_5') }}">
+          <span>⇥</span> Quản lý xuất kho
+        </a>
+        <a class="nav-item {{ 'active' if page == 'history' else '' }}" href="{{ url_for('page_10') }}">
+          <span>◷</span> Lịch sử xuất kho
+        </a>
+      </nav>
+      <p class="nav-label">LIÊN KẾT HỆ THỐNG</p>
+      <nav>
+        <button class="nav-item disabled" type="button" title="Phân hệ của thành viên khác"><span>⌂</span> Bảng điều khiển</button>
+        <button class="nav-item disabled" type="button" title="Phân hệ của thành viên khác"><span>⇤</span> Quản lý nhập kho</button>
+        <button class="nav-item disabled" type="button" title="Phân hệ của thành viên khác"><span>▤</span> Báo cáo & thống kê</button>
+      </nav>
+      <div class="sidebar-user">
+        <span class="avatar">LT</span>
+        <span><b>Lê Thảo</b><small>Nhân viên kho</small></span>
+      </div>
+    </aside>
+
+    <div class="shell">
+      <header class="topbar">
+        <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Mở menu" aria-expanded="false">☰</button>
+        <form class="global-search" id="global-search" role="search">
+          <label class="sr-only" for="global-query">Tìm kiếm</label>
+          <span>⌕</span>
+          <input id="global-query" type="search" placeholder="Tìm SKU, tên hàng hoặc mã phiếu..." autocomplete="off">
+        </form>
+        <div class="top-actions">
+          <span class="system-status"><i></i> Hệ thống hoạt động</span>
+          <span class="user-chip"><span class="avatar small">LT</span><span><b>Lê Thảo</b><small>Nhân viên kho</small></span></span>
+        </div>
+      </header>
+      <main class="content" id="main-content">
+        {% block content %}{% endblock %}
+      </main>
+      <footer>© 2026 DNP Logistics WMS · Phân hệ Hàng hóa & Xuất kho</footer>
+    </div>
+  </div>
+  <div class="toast-region" id="toast-region" aria-live="polite"></div>
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <h2 id="confirm-title">Xác nhận thao tác</h2>
+      <p id="confirm-message"></p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Hủy</button>
+        <button class="btn danger" value="confirm">Xác nhận</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

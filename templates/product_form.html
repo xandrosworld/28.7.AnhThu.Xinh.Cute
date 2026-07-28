@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Cập nhật' if page == 'product-edit' else 'Thêm' }} hàng hóa · DNP Logistics{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('page_1') }}">Hàng hóa</a><span>›</span><span>{{ 'Cập nhật' if page == 'product-edit' else 'Thêm mới' }}</span></div>
+<section class="page-heading">
+  <div><h1>{{ 'Cập nhật hàng hóa' if page == 'product-edit' else 'Thêm hàng hóa mới' }}</h1><p>Thông tin có dấu <b class="required">*</b> là bắt buộc.</p></div>
+</section>
+<form class="form-layout" id="product-form" novalidate>
+  <section class="panel">
+    <h2>Thông tin cơ bản</h2>
+    <div class="form-grid">
+      <label>SKU <b class="required">*</b><input name="sku" required maxlength="30" placeholder="VD: ELC-LP-001"></label>
+      <label>Barcode <b class="required">*</b><input name="barcode" required maxlength="30" inputmode="numeric" placeholder="VD: 8938505970011"></label>
+      <label class="span-2">Tên hàng hóa <b class="required">*</b><input name="name" required maxlength="150" placeholder="Nhập tên đầy đủ"></label>
+      <label>Danh mục <b class="required">*</b><select name="category_id" id="category-select" required><option value="">Chọn danh mục</option></select></label>
+      <label>Đơn vị tính <b class="required">*</b><input name="unit" required maxlength="30" placeholder="Cái, Bộ, Kiện..."></label>
+      <label class="span-2">Mô tả<textarea name="description" maxlength="500" rows="4" placeholder="Mô tả đặc điểm hàng hóa"></textarea></label>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Kho và giá trị</h2>
+    <div class="form-grid">
+      <label>Vị trí kho <b class="required">*</b><input name="location" required maxlength="30" placeholder="VD: A-12-04"></label>
+      <label>Đơn giá (VND) <b class="required">*</b><input name="unit_price" type="number" required min="0" step="1000"></label>
+      <label>Số lượng hiện tại <b class="required">*</b><input name="quantity" type="number" required min="0" step="1"></label>
+      <label>Tồn tối thiểu <b class="required">*</b><input name="min_stock" type="number" required min="0" step="1"></label>
+      <label>Tồn tối đa <b class="required">*</b><input name="max_stock" type="number" required min="1" step="1"></label>
+    </div>
+  </section>
+  <div class="form-actions">
+    <a class="btn" href="{{ url_for('page_1') }}">Hủy bỏ</a>
+    <button class="btn primary" type="submit">{{ 'Lưu thay đổi' if page == 'product-edit' else 'Thêm hàng hóa' }}</button>
+  </div>
+</form>
+{% endblock %}

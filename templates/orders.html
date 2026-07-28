@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Quản lý xuất kho · DNP Logistics{% endblock %}
+{% block content %}
+<section class="page-heading">
+  <div><p class="eyebrow">KHO HÀNG / XUẤT KHO</p><h1>Quản lý xuất kho</h1><p>Theo dõi đầy đủ vòng đời phiếu và kiểm soát tồn trước khi xuất.</p></div>
+  <a class="btn primary" href="{{ url_for('page_6') }}">＋ Tạo phiếu xuất</a>
+</section>
+<section class="stats-grid four" id="order-stats">
+  <article class="stat-card"><span class="stat-icon blue">◷</span><div><b data-stat="pending">—</b><small>Chờ duyệt</small></div></article>
+  <article class="stat-card"><span class="stat-icon amber">↻</span><div><b data-stat="processing">—</b><small>Đang xử lý</small></div></article>
+  <article class="stat-card"><span class="stat-icon green">✓</span><div><b data-stat="completed">—</b><small>Hoàn thành</small></div></article>
+  <article class="stat-card"><span class="stat-icon red">×</span><div><b data-stat="cancelled">—</b><small>Đã hủy</small></div></article>
+</section>
+<section class="panel">
+  <form class="filters" id="order-filters">
+    <label>Từ khóa<input name="q" type="search" placeholder="Mã phiếu, khách hàng, biển số..."></label>
+    <label>Trạng thái<select name="status"><option value="">Tất cả trạng thái</option><option value="pending">Chờ duyệt</option><option value="processing">Đang xử lý</option><option value="completed">Hoàn thành</option><option value="cancelled">Đã hủy</option></select></label>
+    <button class="btn primary" type="submit">Tìm kiếm</button><button class="btn" type="reset">Đặt lại</button>
+  </form>
+  <div class="table-scroll">
+    <table><thead><tr><th>MÃ PHIẾU</th><th>NGÀY XUẤT</th><th>KHÁCH HÀNG</th><th>SỐ DÒNG</th><th>SỐ LƯỢNG</th><th>TỔNG GIÁ TRỊ</th><th>TRẠNG THÁI</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+    <tbody id="order-rows"><tr><td colspan="8" class="empty">Đang tải dữ liệu…</td></tr></tbody></table>
+  </div>
+  <div class="pagination" id="pagination"></div>
+</section>
+{% endblock %}
