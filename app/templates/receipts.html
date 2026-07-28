@@ -22,7 +22,7 @@
 {% block modals %}
 <div class="modal-backdrop hidden" id="receipt-modal"><section class="modal modal-xl" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title">
   <div class="modal-header"><div><span class="eyebrow">{{ 'NHẬP KHO' if inbound else 'XUẤT KHO' }}</span><h2 id="receipt-modal-title">Tạo phiếu {{ title|lower }}</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
-  <form id="receipt-form" novalidate data-type="{{ receipt_type }}">
+  <form id="receipt-form" novalidate data-type="{{ receipt_type }}"><input type="hidden" name="id">
     <div class="form-grid">
       <div class="form-group"><label>Mã phiếu *</label><input name="code" required placeholder="{{ 'PN' if inbound else 'PX' }}-2026-002"><small class="field-error" data-error-for="code"></small></div>
       <div class="form-group"><label>{{ 'Nhà cung cấp' if inbound else 'Khách hàng' }} *</label><select name="partner_id" required><option value="">Chọn đối tác</option></select><small class="field-error" data-error-for="partner_id"></small></div>
@@ -47,11 +47,23 @@
   <div id="receipt-detail"></div>
   <div class="modal-actions no-print">
     <button class="button secondary" id="receipt-print" type="button">In phiếu</button>
+    {% if g.user['role'] in ['admin','manager','cs'] %}<button class="button secondary" id="receipt-edit" type="button">Sửa phiếu nháp</button>{% endif %}
+    {% if inbound and g.user['role'] in ['admin','manager','staff','warehouse'] %}<button class="button secondary" id="receipt-inspect" type="button">Kiểm nhận</button>{% endif %}
     {% if not inbound %}<button class="button secondary" id="receipt-check-stock" type="button">Kiểm tra tồn</button><button class="button secondary" id="receipt-picking" type="button">Picking list</button>{% endif %}
     {% if g.user['role'] in ['admin','manager','cs'] %}<button class="button danger-button" id="receipt-cancel" type="button">Hủy phiếu</button>{% endif %}
     <button class="button secondary modal-close" type="button">Đóng</button>
     {% if g.user['role'] in ['admin','manager','staff','warehouse'] %}<button class="button primary" id="receipt-confirm" type="button">Xác nhận {{ title|lower }}</button>{% endif %}
   </div>
 </section></div>
+{% if inbound %}
+<div class="modal-backdrop hidden" id="inspection-modal"><section class="modal modal-xl" role="dialog" aria-modal="true" aria-labelledby="inspection-title">
+  <div class="modal-header"><div><span class="eyebrow">KIỂM NHẬN</span><h2 id="inspection-title">Kết quả thực nhận</h2><p>Ghi đúng số lượng đạt yêu cầu và nguyên nhân chênh lệch.</p></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+  <form id="inspection-form" novalidate>
+    <div class="table-wrap line-table"><table><thead><tr><th>Hàng hóa</th><th class="number">Chứng từ</th><th class="number">Thực nhận *</th><th>Vấn đề / lý do</th></tr></thead><tbody id="inspection-body"></tbody></table></div>
+    <small class="field-error" data-error-for="items"></small>
+    <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu kiểm nhận</button></div>
+  </form>
+</section></div>
+{% endif %}
 {% include "_scanner.html" %}
 {% endblock %}

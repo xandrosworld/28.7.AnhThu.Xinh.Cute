@@ -19,6 +19,8 @@
   --green: #16a34a;
   --amber: #d97706;
   --red: #dc2626;
+  --muted: var(--slate-500);
+  --border: var(--slate-200);
   --sidebar: 264px;
   --shadow: 0 10px 30px rgba(15, 23, 42, .07);
 }
@@ -151,6 +153,13 @@ body {
   position: absolute;
   top: 18px;
   right: 18px;
+}
+.card-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
 }
 
 .mini-stats {
@@ -330,23 +339,27 @@ body {
   @page { size: A4; margin: 14mm; }
   body { background: #fff !important; color: #000; }
   .sidebar, .topbar, .page-heading, .no-print, .toast-region,
-  .loading-overlay, .sidebar-backdrop, .modal-backdrop:not(#receipt-detail-modal) {
+  .loading-overlay, .sidebar-backdrop, .modal-backdrop {
     display: none !important;
   }
   .content-shell, .main-content { margin: 0 !important; padding: 0 !important; width: 100% !important; }
-  #receipt-detail-modal {
+  body.print-receipt #receipt-detail-modal,
+  body.print-stocktake #stocktake-detail-modal {
     position: static !important;
     display: block !important;
     padding: 0 !important;
     background: transparent !important;
   }
-  #receipt-detail-modal .modal {
+  body.print-receipt #receipt-detail-modal .modal,
+  body.print-stocktake #stocktake-detail-modal .modal {
     width: 100% !important;
     max-height: none !important;
     padding: 0 !important;
     border: 0 !important;
     box-shadow: none !important;
   }
+  body.print-receipt .main-content > *,
+  body.print-stocktake .main-content > * { display: none !important; }
   #report-content .panel, #report-content .stat-card { break-inside: avoid; box-shadow: none; }
   .table-wrap { overflow: visible; }
   table { font-size: 10px; }
@@ -368,6 +381,10 @@ p { margin-bottom: 0; }
   transform: translateY(-150%); border-radius: 8px; color: #fff; background: var(--blue-700);
 }
 .skip-link:focus { transform: translateY(0); }
+:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .38);
+  outline-offset: 2px;
+}
 
 .app-shell { min-height: 100vh; }
 .sidebar {

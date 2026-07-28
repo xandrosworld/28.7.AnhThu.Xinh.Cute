@@ -349,7 +349,7 @@ def test_warehouse_role_can_confirm_but_cs_cannot(client):
     ).status_code == 403
 
 
-def test_stocktake_confirmation_is_idempotent(client, manager_login):
+def test_stocktake_confirmation_is_idempotent(client, manager_login, db):
     _, csrf = manager_login
     created = client.post(
         "/api/stocktakes",
@@ -371,9 +371,19 @@ def test_stocktake_confirmation_is_idempotent(client, manager_login):
     assert client.post(
         f"/api/stocktakes/{stocktake_id}/confirm", headers=headers(csrf)
     ).status_code == 200
-    assert client.post(
+    movement_count = db.execute(
+        "SELECT COUNT(*) FROM stock_movements WHERE reference_code=?",
+        ("KK-IDEMPOTENT",),
+    ).fetchone()[0]
+    repeated = client.post(
         f"/api/stocktakes/{stocktake_id}/confirm", headers=headers(csrf)
-    ).status_code == 409
+    )
+    assert repeated.status_code == 200
+    assert repeated.get_json()["already_completed"] is True
+    assert db.execute(
+        "SELECT COUNT(*) FROM stock_movements WHERE reference_code=?",
+        ("KK-IDEMPOTENT",),
+    ).fetchone()[0] == movement_count
     assert client.post(
         "/api/stocktakes",
         json={

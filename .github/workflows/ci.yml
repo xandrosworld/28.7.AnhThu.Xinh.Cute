@@ -1,0 +1,157 @@
+name: WMS quality
+
+on:
+  push:
+    branches: [main, "integration/**", Anh_Thu, Le_Thao, Thanh_Truc]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wms-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sqlite:
+    name: SQLite / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      - name: Compile Python
+        run: python -m compileall -q app tests
+
+      - name: Validate browser JavaScript syntax
+        run: node --check app/static/app.js
+
+      - name: Run test suite
+        run: python -m pytest -q
+
+      - name: Measure coverage
+        if: matrix.python-version == '3.12'
+        run: >
+          python -m pytest -q
+          --cov=app
+          --cov-report=term-missing
+          --cov-report=xml
+          --cov-fail-under=85
+
+      - name: Upload coverage evidence
+        if: matrix.python-version == '3.12' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-sqlite-python-3.12
+          path: coverage.xml
+          if-no-files-found: warn
+
+  sqlserver:
+    name: SQL Server 2022 / ODBC 18
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SA_PASSWORD: WmsTest_2026_Strong!
+      DATABASE_URL: >-
+        mssql+pyodbc://sa:WmsTest_2026_Strong%21@127.0.0.1:1433/dnp_wms_migration?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+      TEST_DATABASE_URL: >-
+        mssql+pyodbc://sa:WmsTest_2026_Strong%21@127.0.0.1:1433/dnp_wms_test?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_PID: Developer
+          MSSQL_SA_PASSWORD: WmsTest_2026_Strong!
+        ports:
+          - 1433:1433
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Microsoft ODBC Driver 18
+        run: |
+          curl -fsSL -o /tmp/packages-microsoft-prod.deb \
+            "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i /tmp/packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo env ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
+
+      - name: Install Python dependencies
+        run: >
+          python -m pip install --upgrade pip &&
+          python -m pip install -r requirements.txt pyodbc==5.2.0
+
+      - name: Create isolated databases
+        run: |
+          python - <<'PY'
+          import os
+          import time
+          import pyodbc
+
+          connection = None
+          for attempt in range(30):
+              try:
+                  connection = pyodbc.connect(
+                      "DRIVER={ODBC Driver 18 for SQL Server};"
+                      "SERVER=127.0.0.1,1433;"
+                      f"UID=sa;PWD={os.environ['SA_PASSWORD']};"
+                      "Encrypt=yes;TrustServerCertificate=yes",
+                      autocommit=True,
+                      timeout=3,
+                  )
+                  break
+              except pyodbc.Error:
+                  if attempt == 29:
+                      raise
+                  time.sleep(2)
+          assert connection is not None
+          for name in ("dnp_wms_migration", "dnp_wms_test"):
+              connection.execute(
+                  f"IF DB_ID('{name}') IS NULL CREATE DATABASE [{name}]"
+              )
+          connection.close()
+          PY
+
+      - name: Apply migrations and seed
+        run: |
+          flask --app run.py db upgrade
+          flask --app run.py seed-db
+          python - <<'PY'
+          from sqlalchemy import text
+          from app import create_app
+          from app.extensions import db
+
+          app = create_app({"AUTO_INIT_DB": False})
+          with app.app_context():
+              assert db.session.execute(
+                  text("SELECT COUNT(*) FROM alembic_version")
+              ).scalar_one() == 1
+              assert db.session.execute(
+                  text("SELECT COUNT(*) FROM users")
+              ).scalar_one() >= 3
+          PY
+
+      - name: Run full suite against real SQL Server
+        run: python -m pytest -q

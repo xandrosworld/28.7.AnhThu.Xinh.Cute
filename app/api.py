@@ -2,13 +2,22 @@ import csv
 import io
 import json
 import re
-import sqlite3
+from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, Response, g, jsonify, request
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .auth import csrf_required, login_required, roles_required
 from .db import audit, get_db
+from .extensions import db as orm
+from .models import CustomerContractEmail, InventoryAdjustment
+from .services import DomainError, available_quantity
+from .services import confirm_receipt as confirm_receipt_service
+from .services import confirm_stocktake as confirm_stocktake_service
+from .services import picking_list as build_picking_list
+from .services import set_stock
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
@@ -53,6 +62,16 @@ def to_int(value, default=None):
         return default
 
 
+def to_quantity(value):
+    try:
+        result = Decimal(str(value)).quantize(Decimal("0.001"))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not result.is_finite() or result <= 0:
+        return None
+    return int(result) if result == result.to_integral_value() else float(result)
+
+
 def json_object():
     payload = request.get_json(silent=True)
     return payload if isinstance(payload, dict) else {}
@@ -61,6 +80,32 @@ def json_object():
 def initials(full_name):
     parts = [item for item in full_name.split() if item]
     return "".join(item[0].upper() for item in parts[-2:]) or "DN"
+
+
+def validate_date_range(from_date, to_date):
+    errors = {}
+    parsed_dates = {}
+    for query_name, key, value in (
+        ("from", "from_date", from_date),
+        ("to", "to_date", to_date),
+    ):
+        if not value:
+            continue
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            errors[query_name] = "Ngày phải có định dạng YYYY-MM-DD."
+            continue
+        try:
+            parsed_dates[key] = date.fromisoformat(value)
+        except ValueError:
+            errors[query_name] = "Ngày không tồn tại."
+    if (
+        "from_date" in parsed_dates
+        and "to_date" in parsed_dates
+        and parsed_dates["from_date"] > parsed_dates["to_date"]
+    ):
+        errors["from"] = "Ngày bắt đầu không được sau ngày kết thúc."
+        errors["to"] = "Ngày kết thúc không được trước ngày bắt đầu."
+    return errors
 
 
 def serialize_inventory(row):
@@ -84,7 +129,9 @@ def serialize_inventory(row):
         "warehouse_id": row["warehouse_id"],
         "warehouse_name": row["warehouse_name"],
         "unit": row["unit"],
+        "barcode": row["barcode"] or "",
         "quantity": quantity,
+        "available_quantity": row["available_quantity"],
         "min_quantity": minimum,
         "location": row["location"],
         "description": row["description"],
@@ -119,10 +166,12 @@ def dashboard():
     ).fetchall()
     categories = database.execute(
         """
-        SELECT c.name, COUNT(i.id) AS product_count, COALESCE(SUM(i.quantity), 0) AS quantity
-        FROM categories c LEFT JOIN inventory i ON i.category_id = c.id
+        SELECT c.name,
+               (SELECT COUNT(*) FROM inventory i WHERE i.category_id=c.id) AS product_count,
+               COALESCE((SELECT SUM(i.quantity) FROM inventory i WHERE i.category_id=c.id),0) AS quantity
+        FROM categories c
         WHERE c.status = 'active'
-        GROUP BY c.id ORDER BY quantity DESC
+        ORDER BY quantity DESC
         """
     ).fetchall()
     return jsonify(
@@ -150,6 +199,26 @@ def lookups():
     )
 
 
+@bp.get("/roles")
+@login_required
+def role_list():
+    return jsonify(
+        ok=True,
+        items=_list_rows("SELECT id,code,name,description FROM roles ORDER BY id"),
+    )
+
+
+@bp.get("/units")
+@login_required
+def unit_list():
+    return jsonify(
+        ok=True,
+        items=_list_rows(
+            "SELECT id,code,name,allow_break_pack,status FROM units ORDER BY name"
+        ),
+    )
+
+
 @bp.get("/inventory")
 @login_required
 def inventory_list():
@@ -164,8 +233,15 @@ def inventory_list():
     clauses = ["1=1"]
     params = []
     if search:
-        clauses.append("(i.sku LIKE ? OR i.name LIKE ?)")
-        params.extend([f"%{search}%", f"%{search}%"])
+        clauses.append(
+            """(i.sku LIKE ? OR i.name LIKE ? OR COALESCE(i.barcode,'') LIKE ?
+                OR i.unit LIKE ? OR EXISTS (
+                    SELECT 1 FROM inventory_lots lot
+                    WHERE lot.product_id=i.id
+                      AND (lot.pallet_id LIKE ? OR COALESCE(lot.barcode,'') LIKE ?)
+                ))"""
+        )
+        params.extend([f"%{search}%"] * 6)
     if category_id:
         clauses.append("i.category_id = ?")
         params.append(category_id)
@@ -185,7 +261,13 @@ def inventory_list():
     ).fetchone()[0]
     rows = database.execute(
         f"""
-        SELECT i.*, c.name AS category_name, w.name AS warehouse_name
+        SELECT i.*, c.name AS category_name, w.name AS warehouse_name,
+               COALESCE((
+                   SELECT SUM(lot.quantity) FROM inventory_lots lot
+                   WHERE lot.product_id=i.id AND lot.warehouse_id=i.warehouse_id
+                     AND lot.status='active' AND lot.quantity>0
+                     AND (lot.expiry_date IS NULL OR lot.expiry_date>=?)
+               ),0) AS available_quantity
         FROM inventory i
         JOIN categories c ON c.id = i.category_id
         JOIN warehouses w ON w.id = i.warehouse_id
@@ -193,7 +275,7 @@ def inventory_list():
         ORDER BY i.updated_at DESC, i.id DESC
         LIMIT ? OFFSET ?
         """,
-        [*params, per_page, (page - 1) * per_page],
+        [date.today().isoformat(), *params, per_page, (page - 1) * per_page],
     ).fetchall()
     return jsonify(
         ok=True,
@@ -213,13 +295,19 @@ def inventory_detail(item_id):
     database = get_db()
     row = database.execute(
         """
-        SELECT i.*, c.name AS category_name, w.name AS warehouse_name
+        SELECT i.*, c.name AS category_name, w.name AS warehouse_name,
+               COALESCE((
+                   SELECT SUM(lot.quantity) FROM inventory_lots lot
+                   WHERE lot.product_id=i.id AND lot.warehouse_id=i.warehouse_id
+                     AND lot.status='active' AND lot.quantity>0
+                     AND (lot.expiry_date IS NULL OR lot.expiry_date>=?)
+               ),0) AS available_quantity
         FROM inventory i
         JOIN categories c ON c.id = i.category_id
         JOIN warehouses w ON w.id = i.warehouse_id
         WHERE i.id = ?
         """,
-        (item_id,),
+        (date.today().isoformat(), item_id),
     ).fetchone()
     if row is None:
         return error("Không tìm thấy hàng hóa.", 404)
@@ -234,10 +322,110 @@ def inventory_detail(item_id):
         """,
         (item_id,),
     ).fetchall()
+    movements = database.execute(
+        """
+        SELECT sm.*, u.full_name AS created_by_name
+        FROM stock_movements sm
+        JOIN users u ON u.id=sm.created_by
+        WHERE sm.inventory_id=?
+        ORDER BY sm.id DESC LIMIT 20
+        """,
+        (item_id,),
+    ).fetchall()
     return jsonify(
         ok=True,
         item=serialize_inventory(row),
         adjustments=[dict(entry) for entry in history],
+        movements=[dict(entry) for entry in movements],
+    )
+
+
+@bp.get("/stock-movements")
+@login_required
+def stock_movement_list():
+    page = max(to_int(request.args.get("page"), 1), 1)
+    per_page = min(max(to_int(request.args.get("per_page"), 20), 1), 100)
+    search = text(request.args.get("search"))
+    reference = text(
+        request.args.get("reference") or request.args.get("reference_code")
+    )
+    movement_type = text(request.args.get("movement_type"))
+    warehouse_id = to_int(request.args.get("warehouse_id"))
+    product_arg = request.args.get("product_id")
+    inventory_arg = request.args.get("inventory_id")
+    product_id = to_int(product_arg if product_arg not in (None, "") else inventory_arg)
+    from_date = text(request.args.get("from"))
+    to_date = text(request.args.get("to"))
+    errors = validate_date_range(from_date, to_date)
+    if movement_type and movement_type not in {
+        "inbound", "outbound", "stocktake", "adjustment"
+    }:
+        errors["movement_type"] = "Loại biến động không hợp lệ."
+    if product_arg not in (None, "") and to_int(product_arg) is None:
+        errors["product_id"] = "Mã hàng hóa phải là số nguyên."
+    if inventory_arg not in (None, "") and to_int(inventory_arg) is None:
+        errors["inventory_id"] = "Mã hàng hóa phải là số nguyên."
+    if (
+        product_arg not in (None, "")
+        and inventory_arg not in (None, "")
+        and to_int(product_arg) != to_int(inventory_arg)
+    ):
+        errors["inventory_id"] = "Hai tham số hàng hóa phải cùng giá trị."
+    if errors:
+        return error("Bộ lọc biến động kho chưa hợp lệ.", 422, errors)
+
+    clauses, params = ["1=1"], []
+    if search:
+        clauses.append(
+            """(sm.reference_code LIKE ? OR i.sku LIKE ? OR i.name LIKE ?
+                OR sm.pallet_id LIKE ?)"""
+        )
+        params.extend([f"%{search}%"] * 4)
+    if reference:
+        clauses.append("sm.reference_code LIKE ?")
+        params.append(f"%{reference}%")
+    if product_id:
+        clauses.append("sm.inventory_id=?")
+        params.append(product_id)
+    if warehouse_id:
+        clauses.append("i.warehouse_id=?")
+        params.append(warehouse_id)
+    if movement_type:
+        clauses.append("sm.movement_type=?")
+        params.append(movement_type)
+    if from_date:
+        clauses.append("date(sm.created_at)>=date(?)")
+        params.append(from_date)
+    if to_date:
+        clauses.append("date(sm.created_at)<=date(?)")
+        params.append(to_date)
+    where = " AND ".join(clauses)
+    database = get_db()
+    total = database.execute(
+        f"""SELECT COUNT(*) FROM stock_movements sm
+            JOIN inventory i ON i.id=sm.inventory_id WHERE {where}""",
+        params,
+    ).fetchone()[0]
+    rows = database.execute(
+        f"""SELECT sm.*,i.sku,i.name,i.unit,i.warehouse_id,
+                   w.name AS warehouse_name,u.full_name AS created_by_name
+            FROM stock_movements sm
+            JOIN inventory i ON i.id=sm.inventory_id
+            JOIN warehouses w ON w.id=i.warehouse_id
+            JOIN users u ON u.id=sm.created_by
+            WHERE {where}
+            ORDER BY sm.id DESC LIMIT ? OFFSET ?""",
+        [*params, per_page, (page - 1) * per_page],
+    ).fetchall()
+    return jsonify(
+        ok=True,
+        items=[dict(row) for row in rows],
+        pagination={
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": max((total + per_page - 1) // per_page, 1),
+        },
     )
 
 
@@ -271,26 +459,24 @@ def adjust_inventory(item_id):
         return error("Số lượng mới không thay đổi so với tồn kho hiện tại.", 422)
 
     try:
-        database.execute("BEGIN")
-        cursor = database.execute(
-            """
-            INSERT INTO inventory_adjustments
-                (inventory_id, old_quantity, new_quantity, difference, reason, note, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                item_id,
-                item["quantity"],
-                new_quantity,
-                new_quantity - item["quantity"],
-                reason,
-                note,
-                g.user["id"],
-            ),
+        adjustment = InventoryAdjustment(
+            inventory_id=item_id,
+            old_quantity=item["quantity"],
+            new_quantity=new_quantity,
+            difference=new_quantity - item["quantity"],
+            reason=reason,
+            note=note,
+            created_by=g.user["id"],
         )
-        database.execute(
-            "UPDATE inventory SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-            (new_quantity, item_id),
+        orm.session.add(adjustment)
+        orm.session.flush()
+        set_stock(
+            item_id,
+            new_quantity,
+            g.user["id"],
+            f"ADJ-{adjustment.id}",
+            f"{reason}: {note}".strip(": "),
+            expected=item["quantity"],
         )
         audit(
             "ADJUST_STOCK",
@@ -305,14 +491,17 @@ def adjust_inventory(item_id):
             g.user["id"],
             request.remote_addr,
         )
-        database.commit()
-    except Exception:
-        database.rollback()
-        raise
+        orm.session.commit()
+    except DomainError as exc:
+        orm.session.rollback()
+        return error(str(exc), 409)
+    except IntegrityError:
+        orm.session.rollback()
+        return error("Điều chỉnh đã được ghi nhận.", 409)
     return jsonify(
         ok=True,
         message=f"Đã cập nhật tồn kho {item['sku']}.",
-        adjustment_id=cursor.lastrowid,
+        adjustment_id=adjustment.id,
     )
 
 
@@ -327,10 +516,11 @@ def category_list():
         params = [f"%{search}%", f"%{search}%"]
     rows = get_db().execute(
         f"""
-        SELECT c.*, COUNT(i.id) AS product_count
-        FROM categories c LEFT JOIN inventory i ON i.category_id = c.id
+        SELECT c.*,
+               (SELECT COUNT(*) FROM inventory i WHERE i.category_id=c.id) AS product_count
+        FROM categories c
         {where}
-        GROUP BY c.id ORDER BY c.id DESC
+        ORDER BY c.id DESC
         """,
         params,
     ).fetchall()
@@ -376,7 +566,7 @@ def category_create():
             request.remote_addr,
         )
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Mã hoặc tên danh mục đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã thêm danh mục.", id=cursor.lastrowid), 201
 
@@ -412,7 +602,7 @@ def category_update(category_id):
             request.remote_addr,
         )
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Mã hoặc tên danh mục đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã cập nhật danh mục.")
 
@@ -424,9 +614,9 @@ def category_delete(category_id):
     database = get_db()
     category = database.execute(
         """
-        SELECT c.id, c.code, c.name, COUNT(i.id) AS product_count
-        FROM categories c LEFT JOIN inventory i ON i.category_id = c.id
-        WHERE c.id = ? GROUP BY c.id
+        SELECT c.id, c.code, c.name,
+               (SELECT COUNT(*) FROM inventory i WHERE i.category_id=c.id) AS product_count
+        FROM categories c WHERE c.id = ?
         """,
         (category_id,),
     ).fetchone()
@@ -539,7 +729,7 @@ def user_create():
             request.remote_addr,
         )
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Tên đăng nhập hoặc email đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã thêm người dùng.", id=cursor.lastrowid), 201
 
@@ -611,7 +801,7 @@ def user_update(user_id):
             request.remote_addr,
         )
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Tên đăng nhập hoặc email đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã cập nhật người dùng.")
 
@@ -689,7 +879,7 @@ def profile_update():
             request.remote_addr,
         )
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Email này đang được tài khoản khác sử dụng.", 409)
     return jsonify(ok=True, message="Đã cập nhật hồ sơ.")
 
@@ -851,7 +1041,7 @@ def product_create():
         )
         audit("CREATE", "product", cursor.lastrowid, {"sku": sku}, g.user["id"], request.remote_addr)
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Mã SKU hoặc barcode đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã thêm hàng hóa.", id=cursor.lastrowid), 201
 
@@ -914,6 +1104,15 @@ def _create_partner(table):
                 (code, name, email, text(data.get("phone")),
                  ",".join(contract_emails), status),
             )
+            database.executemany(
+                """INSERT INTO customer_contract_emails
+                   (customer_id,email,normalized_email,status)
+                   VALUES (?,?,?,'active')""",
+                [
+                    (cursor.lastrowid, value, value.casefold())
+                    for value in dict.fromkeys(contract_emails)
+                ],
+            )
         else:
             cursor = database.execute(
                 """INSERT INTO suppliers
@@ -923,7 +1122,7 @@ def _create_partner(table):
             )
         audit("CREATE", table[:-1], cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return error("Mã đối tác đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã thêm đối tác.", id=cursor.lastrowid), 201
 
@@ -942,14 +1141,213 @@ def supplier_create():
     return _create_partner("suppliers")
 
 
+@bp.put("/products/<int:product_id>")
+@roles_required("admin", "manager", "cs")
+@csrf_required
+def product_update(product_id):
+    data = json_object()
+    database = get_db()
+    current = database.execute(
+        "SELECT * FROM inventory WHERE id=?", (product_id,)
+    ).fetchone()
+    if current is None:
+        return error("Không tìm thấy hàng hóa.", 404)
+    sku = text(data.get("sku", current["sku"])).upper()
+    name = text(data.get("name", current["name"]))
+    unit = text(data.get("unit", current["unit"]))
+    category_id = to_int(data.get("category_id"), current["category_id"])
+    warehouse_id = to_int(data.get("warehouse_id"), current["warehouse_id"])
+    status = text(data.get("status", current["status"]))
+    errors = {}
+    if not CODE_RE.fullmatch(sku):
+        errors["sku"] = "Mã SKU không hợp lệ."
+    if len(name) < 2:
+        errors["name"] = "Tên hàng hóa phải có ít nhất 2 ký tự."
+    if not unit:
+        errors["unit"] = "Đơn vị tính là bắt buộc."
+    if status not in {"active", "inactive"}:
+        errors["status"] = "Trạng thái không hợp lệ."
+    if database.execute("SELECT id FROM categories WHERE id=?", (category_id,)).fetchone() is None:
+        errors["category_id"] = "Danh mục không tồn tại."
+    if database.execute("SELECT id FROM warehouses WHERE id=?", (warehouse_id,)).fetchone() is None:
+        errors["warehouse_id"] = "Kho không tồn tại."
+    # Moving a product with stock/history would invalidate lot ownership.
+    if warehouse_id != current["warehouse_id"] and current["quantity"] != 0:
+        errors["warehouse_id"] = "Không thể chuyển kho khi hàng hóa còn tồn."
+    if errors:
+        return error("Dữ liệu hàng hóa chưa hợp lệ.", 422, errors)
+    try:
+        database.execute(
+            """UPDATE inventory SET sku=?,barcode=?,name=?,category_id=?,warehouse_id=?,
+               unit=?,min_quantity=?,location=?,description=?,status=?,
+               updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+            (
+                sku, text(data.get("barcode", current["barcode"])) or None, name,
+                category_id, warehouse_id, unit,
+                max(to_int(data.get("min_quantity"), current["min_quantity"]), 0),
+                text(data.get("location", current["location"])),
+                text(data.get("description", current["description"])),
+                status, product_id,
+            ),
+        )
+        audit("UPDATE", "product", product_id, {"sku": sku}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã SKU hoặc barcode đã tồn tại.", 409)
+    return jsonify(ok=True, message="Đã cập nhật hàng hóa.", id=product_id)
+
+
+def _update_partner(table, partner_id):
+    data = json_object()
+    database = get_db()
+    current = database.execute(f"SELECT * FROM {table} WHERE id=?", (partner_id,)).fetchone()
+    if current is None:
+        return error("Không tìm thấy đối tác.", 404)
+    code = text(data.get("code", current["code"])).upper()
+    name = text(data.get("name", current["name"]))
+    email = text(data.get("email", current["email"])).lower()
+    status = text(data.get("status", current["status"]))
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã đối tác không hợp lệ."
+    if len(name) < 2:
+        errors["name"] = "Tên đối tác phải có ít nhất 2 ký tự."
+    if email and not EMAIL_RE.fullmatch(email):
+        errors["email"] = "Email không đúng định dạng."
+    if status not in {"active", "inactive"}:
+        errors["status"] = "Trạng thái không hợp lệ."
+    contract_emails = []
+    if table == "customers":
+        contract_emails = [
+            value.strip().casefold()
+            for value in text(
+                data.get("contract_emails", current["contract_emails"])
+            ).split(",")
+            if value.strip()
+        ]
+        if not contract_emails or any(not EMAIL_RE.fullmatch(value) for value in contract_emails):
+            errors["contract_emails"] = "Cần ít nhất một email hợp đồng hợp lệ."
+    if errors:
+        return error("Dữ liệu đối tác chưa hợp lệ.", 422, errors)
+    try:
+        if table == "customers":
+            database.execute(
+                """UPDATE customers SET code=?,name=?,email=?,phone=?,
+                   contract_emails=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (
+                    code, name, email, text(data.get("phone", current["phone"])),
+                    ",".join(dict.fromkeys(contract_emails)), status, partner_id,
+                ),
+            )
+            database.execute(
+                "DELETE FROM customer_contract_emails WHERE customer_id=?", (partner_id,)
+            )
+            database.executemany(
+                """INSERT INTO customer_contract_emails
+                   (customer_id,email,normalized_email,status)
+                   VALUES (?,?,?,'active')""",
+                [(partner_id, value, value) for value in dict.fromkeys(contract_emails)],
+            )
+        else:
+            database.execute(
+                """UPDATE suppliers SET code=?,name=?,email=?,phone=?,address=?,
+                   status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+                (
+                    code, name, email, text(data.get("phone", current["phone"])),
+                    text(data.get("address", current["address"])), status, partner_id,
+                ),
+            )
+        audit("UPDATE", table[:-1], partner_id, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã đối tác hoặc email hợp đồng đã tồn tại.", 409)
+    return jsonify(ok=True, message="Đã cập nhật đối tác.", id=partner_id)
+
+
+@bp.put("/customers/<int:partner_id>")
+@roles_required("admin", "manager", "cs")
+@csrf_required
+def customer_update(partner_id):
+    return _update_partner("customers", partner_id)
+
+
+@bp.put("/suppliers/<int:partner_id>")
+@roles_required("admin", "manager", "cs")
+@csrf_required
+def supplier_update(partner_id):
+    return _update_partner("suppliers", partner_id)
+
+
+def _warehouse_values(data, current=None):
+    current = current or {}
+    code = text(data.get("code", current.get("code", ""))).upper()
+    name = text(data.get("name", current.get("name", "")))
+    address = text(data.get("address", current.get("address", "")))
+    status = text(data.get("status", current.get("status", "active")))
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã kho không hợp lệ."
+    if len(name) < 2:
+        errors["name"] = "Tên kho phải có ít nhất 2 ký tự."
+    if status not in {"active", "inactive"}:
+        errors["status"] = "Trạng thái không hợp lệ."
+    return (code, name, address, status), errors
+
+
+@bp.post("/warehouses")
+@roles_required("admin")
+@csrf_required
+def warehouse_create():
+    values, errors = _warehouse_values(json_object())
+    if errors:
+        return error("Dữ liệu kho chưa hợp lệ.", 422, errors)
+    database = get_db()
+    try:
+        cursor = database.execute(
+            "INSERT INTO warehouses (code,name,address,status) VALUES (?,?,?,?)", values
+        )
+        audit("CREATE", "warehouse", cursor.lastrowid, {"code": values[0]}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã kho đã tồn tại.", 409)
+    return jsonify(ok=True, message="Đã thêm kho.", id=cursor.lastrowid), 201
+
+
+@bp.put("/warehouses/<int:warehouse_id>")
+@roles_required("admin")
+@csrf_required
+def warehouse_update(warehouse_id):
+    database = get_db()
+    row = database.execute("SELECT * FROM warehouses WHERE id=?", (warehouse_id,)).fetchone()
+    if row is None:
+        return error("Không tìm thấy kho.", 404)
+    values, errors = _warehouse_values(json_object(), dict(row))
+    if errors:
+        return error("Dữ liệu kho chưa hợp lệ.", 422, errors)
+    try:
+        database.execute(
+            "UPDATE warehouses SET code=?,name=?,address=?,status=? WHERE id=?",
+            (*values, warehouse_id),
+        )
+        audit("UPDATE", "warehouse", warehouse_id, {"code": values[0]}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã kho đã tồn tại.", 409)
+    return jsonify(ok=True, message="Đã cập nhật kho.", id=warehouse_id)
+
+
 @bp.get("/warehouses")
 @login_required
 def warehouse_list():
     rows = _list_rows(
-        """SELECT w.*, COUNT(i.id) AS product_count,
-                  COALESCE(SUM(i.quantity),0) AS total_quantity
-           FROM warehouses w LEFT JOIN inventory i ON i.warehouse_id=w.id
-           GROUP BY w.id ORDER BY w.name"""
+        """SELECT w.*,
+                  (SELECT COUNT(*) FROM inventory i WHERE i.warehouse_id=w.id) AS product_count,
+                  COALESCE((SELECT SUM(i.quantity) FROM inventory i WHERE i.warehouse_id=w.id),0) AS total_quantity
+           FROM warehouses w ORDER BY w.name"""
     )
     return jsonify(ok=True, items=rows)
 
@@ -1009,11 +1407,11 @@ def _receipt_list(receipt_type):
         clauses.append("r.status=?")
         params.append(status)
     rows = _list_rows(
-        f"""SELECT r.*, w.name AS warehouse_name, COUNT(ri.id) AS item_count,
-                   COALESCE(SUM(ri.quantity),0) AS total_quantity
+        f"""SELECT r.*, w.name AS warehouse_name,
+                   (SELECT COUNT(*) FROM receipt_items ri WHERE ri.receipt_id=r.id) AS item_count,
+                   COALESCE((SELECT SUM(ri.quantity) FROM receipt_items ri WHERE ri.receipt_id=r.id),0) AS total_quantity
             FROM receipts r JOIN warehouses w ON w.id=r.warehouse_id
-            LEFT JOIN receipt_items ri ON ri.receipt_id=r.id
-            WHERE {' AND '.join(clauses)} GROUP BY r.id ORDER BY r.id DESC""",
+            WHERE {' AND '.join(clauses)} ORDER BY r.id DESC""",
         params,
     )
     stats = {key: 0 for key in ("draft", "pending", "picking", "completed", "cancelled")}
@@ -1051,12 +1449,20 @@ def _receipt_create(receipt_type):
         errors["partner_id"] = "Đối tác không còn hoạt động."
     request_email = text(data.get("request_email")).lower()
     if receipt_type == "outbound" and partner is not None:
-        allowed = {
-            email.strip().lower()
+        allowed = set(
+            orm.session.scalars(
+                orm.select(CustomerContractEmail.normalized_email).where(
+                    CustomerContractEmail.customer_id == partner_id,
+                    CustomerContractEmail.status == "active",
+                )
+            )
+        )
+        allowed.update(
+            email.strip().casefold()
             for email in partner["contract_emails"].split(",")
             if email.strip()
-        }
-        if not EMAIL_RE.fullmatch(request_email) or request_email not in allowed:
+        )
+        if not EMAIL_RE.fullmatch(request_email) or request_email.casefold() not in allowed:
             errors["request_email"] = "Email không thuộc danh sách email hợp đồng."
     normalized = []
     requested_by_product = {}
@@ -1064,13 +1470,20 @@ def _receipt_create(receipt_type):
         if not isinstance(item, dict):
             errors["items"] = f"Dòng {index + 1} chưa hợp lệ."
             break
-        inventory_id, quantity = to_int(item.get("inventory_id")), to_int(item.get("quantity"))
+        inventory_id, quantity = to_int(item.get("inventory_id")), to_quantity(item.get("quantity"))
+        expiry = text(item.get("expiry_date"))
+        if expiry:
+            try:
+                date.fromisoformat(expiry)
+            except ValueError:
+                errors["items"] = f"Hạn dùng ở dòng {index + 1} không đúng định dạng YYYY-MM-DD."
+                break
         stock = database.execute(
             """SELECT id,quantity FROM inventory
                WHERE id=? AND warehouse_id=? AND status='active'""",
             (inventory_id, warehouse_id),
         ).fetchone()
-        if stock is None or not quantity or quantity <= 0:
+        if stock is None or quantity is None:
             errors["items"] = (
                 f"Dòng {index + 1} chưa hợp lệ hoặc hàng hóa không thuộc kho đã chọn."
             )
@@ -1080,22 +1493,26 @@ def _receipt_create(receipt_type):
         )
         if (
             receipt_type == "outbound"
-            and requested_by_product[inventory_id] > stock["quantity"]
+            and requested_by_product[inventory_id]
+            > available_quantity(inventory_id, warehouse_id)
         ):
             errors["items"] = f"Dòng {index + 1} vượt tồn khả dụng."
             break
         normalized.append((inventory_id, quantity, text(item.get("pallet_id")),
-                           text(item.get("barcode")), text(item.get("expiry_date")) or None))
+                           text(item.get("barcode")), expiry or None))
     if errors:
         return error("Dữ liệu phiếu chưa hợp lệ.", 422, errors)
     try:
         database.execute("BEGIN")
         cursor = database.execute(
             """INSERT INTO receipts
-               (code,receipt_type,partner_id,partner_name,warehouse_id,request_email,
+               (code,receipt_type,partner_id,customer_id,supplier_id,partner_name,warehouse_id,request_email,
                 container_no,seal_no,status,note,created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-            (code, receipt_type, partner_id, partner["name"], warehouse_id, request_email,
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (code, receipt_type, partner_id,
+             partner_id if receipt_type == "outbound" else None,
+             partner_id if receipt_type == "inbound" else None,
+             partner["name"], warehouse_id, request_email,
              text(data.get("container_no")), text(data.get("seal_no")),
              status, text(data.get("note")), g.user["id"]),
         )
@@ -1108,7 +1525,7 @@ def _receipt_create(receipt_type):
         )
         audit("CREATE", f"{receipt_type}_receipt", cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         database.rollback()
         return error("Mã phiếu hoặc dòng hàng đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã lưu phiếu.", id=cursor.lastrowid), 201
@@ -1126,6 +1543,145 @@ def inbound_create():
 @csrf_required
 def outbound_create():
     return _receipt_create("outbound")
+
+
+def _receipt_update(receipt_id, receipt_type):
+    data = json_object()
+    database = get_db()
+    receipt = database.execute(
+        "SELECT * FROM receipts WHERE id=? AND receipt_type=?",
+        (receipt_id, receipt_type),
+    ).fetchone()
+    if receipt is None:
+        return error("Không tìm thấy phiếu.", 404)
+    if receipt["status"] != "draft":
+        return error("Chỉ phiếu nháp mới được chỉnh sửa.", 409)
+    code = text(data.get("code", receipt["code"])).upper()
+    partner_id = to_int(data.get("partner_id"), receipt["partner_id"])
+    warehouse_id = to_int(data.get("warehouse_id"), receipt["warehouse_id"])
+    new_status = text(data.get("status", "draft"))
+    submitted = data.get("items")
+    if not isinstance(submitted, list):
+        current_items = database.execute(
+            "SELECT * FROM receipt_items WHERE receipt_id=? ORDER BY id", (receipt_id,)
+        ).fetchall()
+        submitted = [dict(item) for item in current_items]
+    errors = {}
+    if not code:
+        errors["code"] = "Mã phiếu là bắt buộc."
+    if new_status not in {"draft", "pending"}:
+        errors["status"] = "Trạng thái không hợp lệ."
+    partner_table = "suppliers" if receipt_type == "inbound" else "customers"
+    partner = database.execute(
+        f"SELECT * FROM {partner_table} WHERE id=? AND status='active'", (partner_id,)
+    ).fetchone()
+    if partner is None:
+        errors["partner_id"] = "Đối tác không còn hoạt động."
+    if database.execute(
+        "SELECT id FROM warehouses WHERE id=? AND status='active'", (warehouse_id,)
+    ).fetchone() is None:
+        errors["warehouse_id"] = "Kho không còn hoạt động."
+    request_email = text(data.get("request_email", receipt["request_email"])).casefold()
+    if receipt_type == "outbound" and partner is not None:
+        allowed = {
+            value.strip().casefold()
+            for value in partner["contract_emails"].split(",") if value.strip()
+        }
+        allowed.update(
+            orm.session.scalars(
+                orm.select(CustomerContractEmail.normalized_email).where(
+                    CustomerContractEmail.customer_id == partner_id,
+                    CustomerContractEmail.status == "active",
+                )
+            )
+        )
+        if not EMAIL_RE.fullmatch(request_email) or request_email not in allowed:
+            errors["request_email"] = "Email không thuộc danh sách email hợp đồng."
+    normalized, totals = [], {}
+    if not submitted:
+        errors["items"] = "Phiếu phải có ít nhất một dòng hàng."
+    for index, item in enumerate(submitted):
+        if not isinstance(item, dict):
+            errors["items"] = f"Dòng {index + 1} không hợp lệ."
+            break
+        product_id = to_int(item.get("inventory_id"))
+        amount = to_quantity(item.get("quantity"))
+        expiry = text(item.get("expiry_date"))
+        if expiry:
+            try:
+                date.fromisoformat(expiry)
+            except ValueError:
+                errors["items"] = f"Hạn dùng ở dòng {index + 1} không hợp lệ."
+                break
+        product = database.execute(
+            """SELECT id,quantity FROM inventory
+               WHERE id=? AND warehouse_id=? AND status='active'""",
+            (product_id, warehouse_id),
+        ).fetchone()
+        if product is None or amount is None:
+            errors["items"] = f"Dòng {index + 1} không hợp lệ hoặc sai kho."
+            break
+        totals[product_id] = totals.get(product_id, 0) + amount
+        if (
+            receipt_type == "outbound"
+            and totals[product_id] > available_quantity(product_id, warehouse_id)
+        ):
+            errors["items"] = f"Dòng {index + 1} vượt tồn khả dụng."
+            break
+        normalized.append(
+            (
+                product_id, amount, amount, text(item.get("pallet_id")),
+                text(item.get("barcode")), expiry or None,
+            )
+        )
+    if errors:
+        return error("Dữ liệu phiếu chưa hợp lệ.", 422, errors)
+    try:
+        updated = database.execute(
+            """UPDATE receipts SET code=?,partner_id=?,customer_id=?,supplier_id=?,
+               partner_name=?,warehouse_id=?,
+               request_email=?,container_no=?,seal_no=?,status=?,note=?,
+               updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='draft'""",
+            (
+                code, partner_id,
+                partner_id if receipt_type == "outbound" else None,
+                partner_id if receipt_type == "inbound" else None,
+                partner["name"], warehouse_id, request_email,
+                text(data.get("container_no", receipt["container_no"])),
+                text(data.get("seal_no", receipt["seal_no"])), new_status,
+                text(data.get("note", receipt["note"])), receipt_id,
+            ),
+        )
+        if updated.rowcount != 1:
+            database.rollback()
+            return error("Phiếu vừa thay đổi trạng thái; không thể chỉnh sửa.", 409)
+        database.execute("DELETE FROM receipt_items WHERE receipt_id=?", (receipt_id,))
+        database.executemany(
+            """INSERT INTO receipt_items
+               (receipt_id,inventory_id,quantity,accepted_quantity,pallet_id,barcode,expiry_date)
+               VALUES (?,?,?,?,?,?,?)""",
+            [(receipt_id, *item) for item in normalized],
+        )
+        audit("UPDATE", f"{receipt_type}_receipt", receipt_id, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã phiếu hoặc dòng hàng đã tồn tại.", 409)
+    return jsonify(ok=True, message="Đã cập nhật phiếu.", id=receipt_id)
+
+
+@bp.put("/inbound-receipts/<int:receipt_id>")
+@roles_required("admin", "manager", "cs")
+@csrf_required
+def inbound_update(receipt_id):
+    return _receipt_update(receipt_id, "inbound")
+
+
+@bp.put("/outbound-receipts/<int:receipt_id>")
+@roles_required("admin", "manager", "cs")
+@csrf_required
+def outbound_update(receipt_id):
+    return _receipt_update(receipt_id, "outbound")
 
 
 @bp.get("/inbound-receipts/<int:receipt_id>")
@@ -1148,50 +1704,30 @@ def _receipt_detail(receipt_id, expected_type):
 
 
 def _confirm_receipt(receipt_id, expected_type):
-    database = get_db()
-    receipt = database.execute(
-        "SELECT * FROM receipts WHERE id=? AND receipt_type=?", (receipt_id, expected_type)
-    ).fetchone()
-    if receipt is None:
-        return error("Không tìm thấy phiếu.", 404)
-    if receipt["status"] == "completed":
-        return jsonify(
-            ok=True,
-            message="Phiếu đã được xác nhận trước đó; tồn kho không thay đổi.",
-            already_completed=True,
-        )
-    if receipt["status"] == "cancelled":
-        return error("Không thể xác nhận phiếu đã hủy.", 409)
-    if receipt["status"] == "rejected":
-        return error("Không thể xác nhận phiếu đã từ chối.", 409)
-    items = database.execute("SELECT * FROM receipt_items WHERE receipt_id=?", (receipt_id,)).fetchall()
     try:
-        database.execute("BEGIN")
-        for item in items:
-            stock = database.execute("SELECT quantity FROM inventory WHERE id=?", (item["inventory_id"],)).fetchone()
-            change = item["accepted_quantity"] if expected_type == "inbound" else -item["quantity"]
-            if stock["quantity"] + change < 0:
-                raise ValueError("Tồn kho không đủ để xác nhận phiếu.")
-            balance = stock["quantity"] + change
-            database.execute("UPDATE inventory SET quantity=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (balance, item["inventory_id"]))
-            database.execute(
-                """INSERT INTO stock_movements
-                   (inventory_id,movement_type,reference_code,quantity_change,balance_after,pallet_id,created_by)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (item["inventory_id"], expected_type, receipt["code"], change, balance, item["pallet_id"], g.user["id"]),
-            )
-        database.execute(
-            """UPDATE receipts SET status='completed', confirmed_by=?,
-               confirmed_at=CURRENT_TIMESTAMP WHERE id=?""", (g.user["id"], receipt_id)
+        receipt, already_completed = confirm_receipt_service(
+            receipt_id, expected_type, g.user["id"]
         )
-        audit("CONFIRM", f"{expected_type}_receipt", receipt_id, {"code": receipt["code"]}, g.user["id"], request.remote_addr)
-        database.commit()
-    except ValueError as exc:
-        database.rollback()
+        if already_completed:
+            return jsonify(
+                ok=True,
+                message="Phiếu đã được xác nhận trước đó; tồn kho không thay đổi.",
+                already_completed=True,
+            )
+        audit(
+            "CONFIRM", f"{expected_type}_receipt", receipt_id,
+            {"code": receipt.code}, g.user["id"], request.remote_addr,
+        )
+        orm.session.commit()
+    except LookupError:
+        orm.session.rollback()
+        return error("Không tìm thấy phiếu.", 404)
+    except DomainError as exc:
+        orm.session.rollback()
         return error(str(exc), 409)
-    except sqlite3.IntegrityError:
-        database.rollback()
-        return error("Phiếu đã được ghi nhận tồn kho.", 409)
+    except IntegrityError:
+        orm.session.rollback()
+        return error("Phiếu đã được ghi nhận hoặc pallet/barcode bị trùng.", 409)
     return jsonify(ok=True, message="Đã xác nhận phiếu và cập nhật tồn kho.")
 
 
@@ -1234,27 +1770,73 @@ def inbound_inspect(receipt_id):
     for item in submitted:
         if not isinstance(item, dict):
             return error("Dòng kiểm nhận không hợp lệ.", 422, {"items": "Kiểm tra lại từng dòng hàng."})
-        line_id, accepted = to_int(item.get("id")), to_int(item.get("accepted_quantity"))
+        line_id = to_int(item.get("id"))
+        accepted_value = item.get("accepted_quantity")
+        try:
+            accepted_decimal = Decimal(str(accepted_value)).quantize(Decimal("0.001"))
+            accepted = (
+                int(accepted_decimal)
+                if accepted_decimal == accepted_decimal.to_integral_value()
+                else float(accepted_decimal)
+            )
+        except (InvalidOperation, TypeError, ValueError):
+            accepted_decimal, accepted = Decimal("-1"), None
         line = existing.get(line_id)
         if (
             line is None
             or line_id in submitted_ids
             or accepted is None
+            or not accepted_decimal.is_finite()
             or accepted < 0
             or accepted > line["quantity"]
         ):
             return error("Số lượng thực nhận không hợp lệ.", 422, {"items": "Kiểm tra lại từng dòng hàng."})
+        issue_note = text(item.get("issue_note"))
+        if accepted < line["quantity"] and len(issue_note) < 3:
+            return error(
+                "Dòng có hàng thiếu hoặc hỏng phải ghi rõ lý do.",
+                422,
+                {"items": "Vui lòng nhập lý do cho số lượng bị từ chối."},
+            )
         submitted_ids.add(line_id)
-        normalized.append((accepted, text(item.get("issue_note")), line_id))
+        normalized.append((accepted, line["quantity"] - accepted, issue_note, line_id))
     if submitted_ids != set(existing):
         return error("Cần kiểm nhận đầy đủ các dòng hàng.", 422, {"items": "Thiếu dòng kiểm nhận."})
-    database.executemany(
-        "UPDATE receipt_items SET accepted_quantity=?, issue_note=? WHERE id=?",
-        normalized,
-    )
-    database.execute("UPDATE receipts SET status='pending' WHERE id=?", (receipt_id,))
-    audit("INSPECT", "inbound_receipt", receipt_id, {}, g.user["id"], request.remote_addr)
-    database.commit()
+    try:
+        locked = database.execute(
+            """UPDATE receipts SET status='pending',updated_at=CURRENT_TIMESTAMP
+               WHERE id=? AND status IN ('draft','pending')""",
+            (receipt_id,),
+        )
+        if locked.rowcount != 1:
+            database.rollback()
+            return error("Phiếu vừa được khóa; không thể kiểm nhận.", 409)
+        database.executemany(
+            """UPDATE receipt_items SET accepted_quantity=?, rejected_quantity=?,
+               issue_note=? WHERE id=?""",
+            normalized,
+        )
+        for accepted, rejected, issue_note, line_id in normalized:
+            inspection = database.execute(
+                """UPDATE inbound_inspections
+                   SET accepted_quantity=?,rejected_quantity=?,issue_note=?,
+                       inspected_by=?,updated_at=CURRENT_TIMESTAMP
+                   WHERE receipt_item_id=?""",
+                (accepted, rejected, issue_note, g.user["id"], line_id),
+            )
+            if inspection.rowcount == 0:
+                database.execute(
+                    """INSERT INTO inbound_inspections
+                       (receipt_item_id,accepted_quantity,rejected_quantity,
+                        issue_note,inspected_by)
+                       VALUES (?,?,?,?,?)""",
+                    (line_id, accepted, rejected, issue_note, g.user["id"]),
+                )
+        audit("INSPECT", "inbound_receipt", receipt_id, {}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Không thể lưu kiểm nhận do dữ liệu đã thay đổi.", 409)
     return jsonify(ok=True, message="Đã lưu kết quả kiểm nhận.")
 
 
@@ -1271,7 +1853,14 @@ def outbound_check_stock(receipt_id):
             requested_by_product.get(item["inventory_id"], 0) + item["quantity"]
         )
     for item in receipt["items"]:
-        available = item["available_quantity"]
+        available = available_quantity(
+            item["inventory_id"], receipt["warehouse_id"]
+        )
+        available_value = (
+            int(available)
+            if available == available.to_integral_value()
+            else float(available)
+        )
         requested = requested_by_product[item["inventory_id"]]
         ok = available >= requested
         sufficient = sufficient and ok
@@ -1280,7 +1869,7 @@ def outbound_check_stock(receipt_id):
             "sku": item["sku"],
             "name": item["name"],
             "requested": requested,
-            "available": available,
+            "available": available_value,
             "sufficient": ok,
         })
     return jsonify(ok=True, sufficient=sufficient, items=lines,
@@ -1290,21 +1879,19 @@ def outbound_check_stock(receipt_id):
 @bp.get("/outbound-receipts/<int:receipt_id>/picking-list")
 @login_required
 def outbound_picking_list(receipt_id):
-    receipt = _receipt_payload(receipt_id)
-    if receipt is None or receipt["receipt_type"] != "outbound":
+    try:
+        receipt, items = build_picking_list(receipt_id)
+    except LookupError:
         return error("Không tìm thấy phiếu xuất.", 404)
-    items = sorted(
-        receipt["items"],
-        key=lambda item: (
-            item["expiry_date"] is None,
-            item["expiry_date"] or "9999-12-31",
-            item["id"],
-        ),
-    )
+    except DomainError as exc:
+        return error(str(exc), 409)
+    warehouse = get_db().execute(
+        "SELECT name FROM warehouses WHERE id=?", (receipt.warehouse_id,)
+    ).fetchone()
     return jsonify(
         ok=True,
-        receipt_code=receipt["code"],
-        warehouse_name=receipt["warehouse_name"],
+        receipt_code=receipt.code,
+        warehouse_name=warehouse["name"] if warehouse else "",
         strategy="FEFO khi có hạn dùng, FIFO cho hàng còn lại",
         items=items,
     )
@@ -1321,7 +1908,17 @@ def _cancel_receipt(receipt_id, expected_type):
         return error("Không thể hủy phiếu đã hoàn tất.", 409)
     if receipt["status"] == "cancelled":
         return jsonify(ok=True, message="Phiếu đã được hủy trước đó.", already_cancelled=True)
-    database.execute("UPDATE receipts SET status='cancelled' WHERE id=?", (receipt_id,))
+    updated = database.execute(
+        """UPDATE receipts SET status='cancelled',updated_at=CURRENT_TIMESTAMP
+           WHERE id=? AND status NOT IN ('completed','cancelled')""",
+        (receipt_id,),
+    )
+    if updated.rowcount != 1:
+        database.rollback()
+        latest = database.execute("SELECT status FROM receipts WHERE id=?", (receipt_id,)).fetchone()
+        if latest and latest["status"] == "cancelled":
+            return jsonify(ok=True, message="Phiếu đã được hủy trước đó.", already_cancelled=True)
+        return error("Phiếu vừa được xác nhận; không thể hủy.", 409)
     audit("CANCEL", f"{expected_type}_receipt", receipt_id, {"code": receipt["code"]}, g.user["id"], request.remote_addr)
     database.commit()
     return jsonify(ok=True, message="Đã hủy phiếu.")
@@ -1349,13 +1946,40 @@ def stocktake_list():
     if search:
         clause, params = "WHERE s.code LIKE ?", [f"%{search}%"]
     rows = _list_rows(
-        f"""SELECT s.*, w.name AS warehouse_name, COUNT(si.id) AS item_count,
-                   COALESCE(SUM(si.counted_quantity-si.system_quantity),0) AS difference
+        f"""SELECT s.*, w.name AS warehouse_name,
+                   (SELECT COUNT(*) FROM stocktake_items si WHERE si.stocktake_id=s.id) AS item_count,
+                   COALESCE((SELECT SUM(si.counted_quantity-si.system_quantity)
+                             FROM stocktake_items si WHERE si.stocktake_id=s.id),0) AS difference
             FROM stocktakes s JOIN warehouses w ON w.id=s.warehouse_id
-            LEFT JOIN stocktake_items si ON si.stocktake_id=s.id
-            {clause} GROUP BY s.id ORDER BY s.id DESC""", params
+            {clause} ORDER BY s.id DESC""", params
     )
     return jsonify(ok=True, items=rows)
+
+
+@bp.get("/stocktakes/<int:stocktake_id>")
+@login_required
+def stocktake_detail(stocktake_id):
+    database = get_db()
+    stocktake = database.execute(
+        """SELECT s.*,w.name AS warehouse_name,creator.full_name AS created_by_name,
+                  confirmer.full_name AS confirmed_by_name
+           FROM stocktakes s JOIN warehouses w ON w.id=s.warehouse_id
+           JOIN users creator ON creator.id=s.created_by
+           LEFT JOIN users confirmer ON confirmer.id=s.confirmed_by
+           WHERE s.id=?""",
+        (stocktake_id,),
+    ).fetchone()
+    if stocktake is None:
+        return error("Không tìm thấy phiếu kiểm kê.", 404)
+    payload = dict(stocktake)
+    payload["items"] = _list_rows(
+        """SELECT si.*,i.sku,i.name,i.unit,
+                  (si.counted_quantity-si.system_quantity) AS difference
+           FROM stocktake_items si JOIN inventory i ON i.id=si.inventory_id
+           WHERE si.stocktake_id=? ORDER BY si.id""",
+        (stocktake_id,),
+    )
+    return jsonify(ok=True, item=payload)
 
 
 @bp.post("/stocktakes")
@@ -1407,7 +2031,7 @@ def stocktake_create():
         )
         audit("CREATE", "stocktake", cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
         database.commit()
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         database.rollback()
         return error("Mã phiếu kiểm kê đã tồn tại.", 409)
     return jsonify(ok=True, message="Đã lưu phiếu kiểm kê.", id=cursor.lastrowid), 201
@@ -1417,74 +2041,126 @@ def stocktake_create():
 @roles_required("admin", "manager", "warehouse")
 @csrf_required
 def stocktake_confirm(stocktake_id):
+    try:
+        stocktake, already_completed = confirm_stocktake_service(
+            stocktake_id, g.user["id"]
+        )
+        if already_completed:
+            return jsonify(
+                ok=True,
+                message="Phiếu đã được xác nhận trước đó; tồn kho không thay đổi.",
+                already_completed=True,
+            )
+        audit("CONFIRM", "stocktake", stocktake_id, {"code": stocktake.code}, g.user["id"], request.remote_addr)
+        orm.session.commit()
+    except LookupError:
+        orm.session.rollback()
+        return error("Không tìm thấy phiếu kiểm kê.", 404)
+    except DomainError as exc:
+        orm.session.rollback()
+        return error(str(exc), 409)
+    except IntegrityError:
+        orm.session.rollback()
+        return error("Phiếu đã được cập nhật tồn kho.", 409)
+    return jsonify(ok=True, message="Đã xác nhận kiểm kê và cập nhật chênh lệch.")
+
+
+@bp.post("/stocktakes/<int:stocktake_id>/cancel")
+@roles_required("admin", "manager", "warehouse")
+@csrf_required
+def stocktake_cancel(stocktake_id):
     database = get_db()
-    stocktake = database.execute("SELECT * FROM stocktakes WHERE id=?", (stocktake_id,)).fetchone()
+    stocktake = database.execute(
+        "SELECT * FROM stocktakes WHERE id=?", (stocktake_id,)
+    ).fetchone()
     if stocktake is None:
         return error("Không tìm thấy phiếu kiểm kê.", 404)
     if stocktake["status"] == "completed":
-        return error("Phiếu đã được xác nhận.", 409)
+        return error("Không thể hủy phiếu kiểm kê đã hoàn tất.", 409)
     if stocktake["status"] == "cancelled":
-        return error("Không thể xác nhận phiếu đã hủy.", 409)
-    items = database.execute("SELECT * FROM stocktake_items WHERE stocktake_id=?", (stocktake_id,)).fetchall()
-    try:
-        database.execute("BEGIN")
-        for item in items:
-            current = database.execute("SELECT quantity FROM inventory WHERE id=?", (item["inventory_id"],)).fetchone()[0]
-            if current != item["system_quantity"]:
-                raise ValueError(
-                    "Tồn kho đã thay đổi sau khi lập phiếu; vui lòng tạo phiếu kiểm kê mới."
-                )
-            change = item["counted_quantity"] - current
-            database.execute("UPDATE inventory SET quantity=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (item["counted_quantity"], item["inventory_id"]))
-            database.execute(
-                """INSERT INTO stock_movements
-                   (inventory_id,movement_type,reference_code,quantity_change,balance_after,created_by)
-                   VALUES (?,?,?,?,?,?)""",
-                (item["inventory_id"], "stocktake", stocktake["code"], change, item["counted_quantity"], g.user["id"]),
-            )
-        database.execute(
-            "UPDATE stocktakes SET status='completed',confirmed_by=?,confirmed_at=CURRENT_TIMESTAMP WHERE id=?",
-            (g.user["id"], stocktake_id),
+        return jsonify(
+            ok=True, message="Phiếu đã được hủy trước đó.", already_cancelled=True
         )
-        audit("CONFIRM", "stocktake", stocktake_id, {"code": stocktake["code"]}, g.user["id"], request.remote_addr)
-        database.commit()
-    except ValueError as exc:
+    updated = database.execute(
+        """UPDATE stocktakes SET status='cancelled',updated_at=CURRENT_TIMESTAMP
+           WHERE id=? AND status='draft'""",
+        (stocktake_id,),
+    )
+    if updated.rowcount != 1:
         database.rollback()
-        return error(str(exc), 409)
-    except sqlite3.IntegrityError:
-        database.rollback()
-        return error("Phiếu đã được cập nhật tồn kho.", 409)
-    return jsonify(ok=True, message="Đã xác nhận kiểm kê và cập nhật chênh lệch.")
+        latest = database.execute("SELECT status FROM stocktakes WHERE id=?", (stocktake_id,)).fetchone()
+        if latest and latest["status"] == "cancelled":
+            return jsonify(ok=True, message="Phiếu đã được hủy trước đó.", already_cancelled=True)
+        return error("Phiếu vừa được xác nhận; không thể hủy.", 409)
+    audit("CANCEL", "stocktake", stocktake_id, {"code": stocktake["code"]}, g.user["id"], request.remote_addr)
+    database.commit()
+    return jsonify(ok=True, message="Đã hủy phiếu kiểm kê.")
+
+
+def _report_filter_values():
+    filters = {
+        "from_date": text(request.args.get("from")),
+        "to_date": text(request.args.get("to")),
+        "warehouse_id": to_int(request.args.get("warehouse_id")),
+        "product_id": to_int(request.args.get("product_id")),
+        "customer_id": to_int(request.args.get("customer_id")),
+    }
+    errors = validate_date_range(filters["from_date"], filters["to_date"])
+    return filters, errors
+
+
+def _report_movement_filters(filters):
+    clauses, params = ["1=1"], []
+    if filters["from_date"]:
+        clauses.append("date(sm.created_at)>=date(?)")
+        params.append(filters["from_date"])
+    if filters["to_date"]:
+        clauses.append("date(sm.created_at)<=date(?)")
+        params.append(filters["to_date"])
+    if filters["warehouse_id"]:
+        clauses.append("i.warehouse_id=?")
+        params.append(filters["warehouse_id"])
+    if filters["product_id"]:
+        clauses.append("i.id=?")
+        params.append(filters["product_id"])
+    if filters["customer_id"]:
+        clauses.append(
+            """EXISTS (SELECT 1 FROM receipts r
+                       WHERE r.code=sm.reference_code
+                         AND r.receipt_type='outbound' AND r.partner_id=?)"""
+        )
+        params.append(filters["customer_id"])
+    return " AND ".join(clauses), params
 
 
 @bp.get("/reports/summary")
 @login_required
 def report_summary():
     database = get_db()
-    from_date = text(request.args.get("from"))
-    to_date = text(request.args.get("to"))
-    warehouse_id = to_int(request.args.get("warehouse_id"))
+    filters, filter_errors = _report_filter_values()
+    if filter_errors:
+        return error(
+            "Khoảng thời gian báo cáo chưa hợp lệ.", 422, filter_errors
+        )
+    from_date = filters["from_date"]
+    to_date = filters["to_date"]
+    warehouse_id = filters["warehouse_id"]
+    product_id = filters["product_id"]
+    customer_id = filters["customer_id"]
     inventory_clauses, inventory_params = ["i.status='active'"], []
     if warehouse_id:
         inventory_clauses.append("i.warehouse_id=?")
         inventory_params.append(warehouse_id)
+    if product_id:
+        inventory_clauses.append("i.id=?")
+        inventory_params.append(product_id)
     summary = database.execute(
         f"""SELECT COUNT(*) AS products, COALESCE(SUM(i.quantity),0) AS stock,
                    SUM(CASE WHEN i.quantity<=i.min_quantity THEN 1 ELSE 0 END) AS alerts
             FROM inventory i WHERE {' AND '.join(inventory_clauses)}""",
         inventory_params,
     ).fetchone()
-    movement_clauses, movement_params = ["1=1"], []
-    if from_date:
-        movement_clauses.append("date(sm.created_at)>=date(?)")
-        movement_params.append(from_date)
-    if to_date:
-        movement_clauses.append("date(sm.created_at)<=date(?)")
-        movement_params.append(to_date)
-    if warehouse_id:
-        movement_clauses.append("i.warehouse_id=?")
-        movement_params.append(warehouse_id)
-    movement_where = " AND ".join(movement_clauses)
+    movement_where, movement_params = _report_movement_filters(filters)
     movement_totals = _list_rows(
         f"""SELECT sm.movement_type, COUNT(*) AS transactions,
                    COALESCE(SUM(ABS(sm.quantity_change)),0) AS quantity
@@ -1514,6 +2190,14 @@ def report_summary():
     if warehouse_id:
         receipt_clauses.append("warehouse_id=?")
         receipt_params.append(warehouse_id)
+    if product_id:
+        receipt_clauses.append(
+            "EXISTS (SELECT 1 FROM receipt_items ri WHERE ri.receipt_id=receipts.id AND ri.inventory_id=?)"
+        )
+        receipt_params.append(product_id)
+    if customer_id:
+        receipt_clauses.append("receipt_type='outbound' AND partner_id=?")
+        receipt_params.append(customer_id)
     receipt_counts = database.execute(
         f"""SELECT
               SUM(CASE WHEN receipt_type='inbound' THEN 1 ELSE 0 END) inbound,
@@ -1528,15 +2212,25 @@ def report_summary():
 @bp.get("/reports/export.csv")
 @login_required
 def report_export():
+    filters, filter_errors = _report_filter_values()
+    if filter_errors:
+        return error(
+            "Khoảng thời gian báo cáo chưa hợp lệ.", 422, filter_errors
+        )
+    movement_where, movement_params = _report_movement_filters(
+        filters
+    )
     output = io.StringIO()
     output.write("\ufeff")
     writer = csv.writer(output)
     writer.writerow(["Thời gian", "Chứng từ", "SKU", "Hàng hóa", "Loại", "Thay đổi", "Tồn sau"])
     for row in _list_rows(
-        """SELECT sm.created_at,sm.reference_code,i.sku,i.name,sm.movement_type,
-                  sm.quantity_change,sm.balance_after
-           FROM stock_movements sm JOIN inventory i ON i.id=sm.inventory_id
-           ORDER BY sm.id DESC"""
+        f"""SELECT sm.created_at,sm.reference_code,i.sku,i.name,sm.movement_type,
+                   sm.quantity_change,sm.balance_after
+            FROM stock_movements sm JOIN inventory i ON i.id=sm.inventory_id
+            WHERE {movement_where}
+            ORDER BY sm.id DESC""",
+        movement_params,
     ):
         writer.writerow(row.values())
     return Response(output.getvalue(), mimetype="text/csv; charset=utf-8",

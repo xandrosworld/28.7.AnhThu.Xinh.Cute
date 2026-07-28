@@ -6,4 +6,11 @@ venv/
 instance/
 .env
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+backups/

@@ -2,6 +2,20 @@
 {% block title %}Kho hàng · DNP WMS{% endblock %}
 {% block topbar_title %}Danh sách kho hàng{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">MẠNG LƯỚI KHO</span><h1>Kho hàng</h1><p>Thông tin các kho và lượng hàng đang lưu trữ.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">MẠNG LƯỚI KHO</span><h1>Kho hàng</h1><p>Thông tin các kho và lượng hàng đang lưu trữ.</p></div>{% if g.user['role'] == 'admin' %}<button class="button primary" id="warehouse-add" type="button">＋ Thêm kho</button>{% endif %}</div>
 <section class="card-grid" id="warehouse-grid" aria-live="polite">{% for i in range(4) %}<article class="panel skeleton-block card-placeholder"></article>{% endfor %}</section>
+{% endblock %}
+{% block modals %}
+<div class="modal-backdrop hidden" id="warehouse-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="warehouse-modal-title">
+  <div class="modal-header"><div><span class="eyebrow">KHO HÀNG</span><h2 id="warehouse-modal-title">Thêm kho</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+  <form id="warehouse-form" novalidate><input type="hidden" name="id">
+    <div class="form-grid">
+      <div class="form-group"><label for="warehouse-code">Mã kho *</label><input id="warehouse-code" name="code" required maxlength="20"><small class="field-error" data-error-for="code"></small></div>
+      <div class="form-group"><label for="warehouse-status">Trạng thái</label><select id="warehouse-status" name="status"><option value="active">Hoạt động</option><option value="inactive">Ngừng hoạt động</option></select><small class="field-error" data-error-for="status"></small></div>
+      <div class="form-group span-full"><label for="warehouse-name">Tên kho *</label><input id="warehouse-name" name="name" required maxlength="120"><small class="field-error" data-error-for="name"></small></div>
+      <div class="form-group span-full"><label for="warehouse-address">Địa chỉ</label><textarea id="warehouse-address" name="address" rows="3" maxlength="300"></textarea><small class="field-error" data-error-for="address"></small></div>
+    </div>
+    <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu kho</button></div>
+  </form>
+</section></div>
 {% endblock %}

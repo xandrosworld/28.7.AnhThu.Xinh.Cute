@@ -29,25 +29,30 @@
         <a class="nav-item {{ 'active' if page == 'inventory' }}" href="{{ url_for('views.inventory') }}">
           <span aria-hidden="true">▦</span> Tồn kho
         </a>
-        <a class="nav-item {{ 'active' if page == 'stocktakes' }}" href="{{ url_for('views.stocktakes') }}">
-          <span aria-hidden="true">✓</span> Kiểm kê
-        </a>
+        {% if g.user['role'] in ['admin','warehouse','staff','manager'] %}
+          <a class="nav-item {{ 'active' if page == 'stocktakes' }}" href="{{ url_for('views.stocktakes') }}">
+            <span aria-hidden="true">✓</span> Kiểm kê
+          </a>
+        {% endif %}
         <a class="nav-item {{ 'active' if page == 'reports' }}" href="{{ url_for('views.reports') }}">
           <span aria-hidden="true">▥</span> Báo cáo
         </a>
-        <p class="nav-label">Dữ liệu nền</p>
-        <a class="nav-item {{ 'active' if page == 'products' }}" href="{{ url_for('views.products') }}">
-          <span aria-hidden="true">◈</span> Hàng hóa
-        </a>
-        <a class="nav-item {{ 'active' if page == 'categories' }}" href="{{ url_for('views.categories') }}">
-          <span aria-hidden="true">◇</span> Danh mục
-        </a>
-        <a class="nav-item {{ 'active' if page == 'customers' }}" href="{{ url_for('views.customers') }}">
-          <span aria-hidden="true">♙</span> Khách hàng
-        </a>
-        <a class="nav-item {{ 'active' if page == 'suppliers' }}" href="{{ url_for('views.suppliers') }}">
-          <span aria-hidden="true">♧</span> Nhà cung cấp
-        </a>
+        {% if g.user['role'] in ['admin','cs','manager'] %}
+          <p class="nav-label">Dữ liệu nền</p>
+          <a class="nav-item {{ 'active' if page == 'products' }}" href="{{ url_for('views.products') }}">
+            <span aria-hidden="true">◈</span> Hàng hóa
+          </a>
+          <a class="nav-item {{ 'active' if page == 'categories' }}" href="{{ url_for('views.categories') }}">
+            <span aria-hidden="true">◇</span> Danh mục
+          </a>
+          <a class="nav-item {{ 'active' if page == 'customers' }}" href="{{ url_for('views.customers') }}">
+            <span aria-hidden="true">♙</span> Khách hàng
+          </a>
+          <a class="nav-item {{ 'active' if page == 'suppliers' }}" href="{{ url_for('views.suppliers') }}">
+            <span aria-hidden="true">♧</span> Nhà cung cấp
+          </a>
+        {% endif %}
+        {% if g.user['role'] in ['warehouse','staff'] %}<p class="nav-label">Dữ liệu kho</p>{% endif %}
         <a class="nav-item {{ 'active' if page == 'warehouses' }}" href="{{ url_for('views.warehouses') }}">
           <span aria-hidden="true">▣</span> Kho hàng
         </a>

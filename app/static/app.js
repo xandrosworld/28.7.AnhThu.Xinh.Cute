@@ -7,7 +7,11 @@
     inventory: [],
     categories: [],
     users: [],
+    products: [],
+    partners: [],
+    warehouses: [],
   };
+  const modalFocus = new WeakMap();
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -34,6 +38,7 @@
     if (!region) return;
     const item = document.createElement("div");
     item.className = `toast ${type}`;
+    item.setAttribute("role", type === "error" ? "alert" : "status");
     item.innerHTML = `
       <span aria-hidden="true">${type === "error" ? "!" : "✓"}</span>
       <div><strong>${escapeHtml(title || (type === "error" ? "Có lỗi xảy ra" : "Thành công"))}</strong><p>${escapeHtml(message)}</p></div>
@@ -63,14 +68,30 @@
       networkError.status = 0;
       throw networkError;
     }
-    const data = await response.json().catch(() => ({ ok: false, message: "Phản hồi máy chủ không hợp lệ." }));
+    const raw = await response.json().catch(() => ({ ok: false, message: "Phản hồi máy chủ không hợp lệ." }));
     if (!response.ok) {
       if (response.status === 401 && page !== "login") window.location.href = "/";
-      const error = new Error(data.error?.message || data.message || "Yêu cầu không thành công.");
+      const error = new Error(raw.error?.message || raw.message || "Yêu cầu không thành công.");
       error.status = response.status;
-      error.errors = data.error?.fields || data.errors || {};
+      error.errors = raw.error?.fields || raw.errors || {};
       throw error;
     }
+    // The public API uses {data, meta}; legacy aliases remain readable while all
+    // pages are migrated. Keeping this normalization here avoids page-specific
+    // response assumptions and makes links such as CSV downloads unaffected.
+    const nested = raw.data && typeof raw.data === "object" && !Array.isArray(raw.data)
+      ? raw.data : {};
+    const data = { ...raw, ...nested };
+    if (Array.isArray(raw.data) && !data.items) data.items = raw.data;
+    data.meta = raw.meta || data.meta || {};
+    if (!data.item && nested.id != null) data.item = nested;
+    if (!data.user && path.endsWith("/auth/me") && (nested.id != null || nested.username)) data.user = nested;
+    data.csrf_token ??= data.meta.csrf_token;
+    data.items ??= nested.items || [];
+    data.pagination ??= data.meta.pagination || {
+      page: 1, pages: 1, per_page: data.items.length || 1, total: data.items.length,
+    };
+    data.message ??= nested.message || "";
     return data;
   }
 
@@ -114,6 +135,7 @@
 
   function openModal(modal) {
     if (!modal) return;
+    modalFocus.set(modal, document.activeElement);
     modal.classList.remove("hidden");
     document.body.style.overflow = "hidden";
     const focusable = $("input:not([type=hidden]), select, textarea, button", modal);
@@ -122,8 +144,11 @@
 
   function closeModal(modal) {
     if (!modal) return;
+    if (modal.id === "scanner-modal") stopScanner();
     modal.classList.add("hidden");
     document.body.style.overflow = "";
+    modalFocus.get(modal)?.focus?.();
+    modalFocus.delete(modal);
   }
 
   function initModals() {
@@ -134,13 +159,26 @@
       });
     });
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") $$(".modal-backdrop:not(.hidden)").forEach(closeModal);
+      const openModals = $$(".modal-backdrop:not(.hidden)");
+      const topModal = openModals[openModals.length - 1];
+      if (event.key === "Escape" && topModal) closeModal(topModal);
+      if (event.key === "Tab") {
+        const modal = topModal;
+        if (!modal) return;
+        const focusable = $$('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])', modal)
+          .filter((element) => element.offsetParent !== null);
+        if (!focusable.length) return;
+        const first = focusable[0]; const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
     });
   }
 
   function pagination(container, data, callback) {
     if (!container) return;
-    const { page: current, pages } = data;
+    const current = Number(data?.page) || 1;
+    const pages = Math.max(Number(data?.pages) || 1, 1);
     const candidates = [...new Set([1, current - 1, current, current + 1, pages])]
       .filter((number) => number >= 1 && number <= pages).sort((a, b) => a - b);
     container.innerHTML = "";
@@ -215,6 +253,7 @@
     });
     form?.addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (!form.reportValidity()) return;
       clearErrors(form);
       const button = $('button[type="submit"]', form);
       setButtonBusy(button, true, "Đang xác thực…");
@@ -288,7 +327,7 @@
           <td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-title">${escapeHtml(item.name)}</span><span class="cell-subtitle">${escapeHtml(item.unit)}</span></td>
           <td>${escapeHtml(item.category_name)}</td>
           <td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span><span class="cell-subtitle">Vị trí ${escapeHtml(item.location || "—")}</span></td>
-          <td class="number"><b>${formatNumber(item.quantity)}</b> ${escapeHtml(item.unit)}</td>
+          <td class="number"><b>${formatNumber(item.quantity)}</b> ${escapeHtml(item.unit)}${item.available_quantity != null ? `<span class="cell-subtitle">Khả dụng: ${formatNumber(item.available_quantity)}</span>` : ""}</td>
           <td>${statusBadge(item)}</td>
           <td>${formatDateTime(item.updated_at)}</td>
           <td><div class="table-actions"><button class="action-button detail-button" data-id="${item.id}" type="button">Chi tiết</button>${["admin", "manager", "warehouse"].includes(role) ? `<button class="action-button adjust-button" data-id="${item.id}" type="button">Kiểm kê</button>` : ""}</div></td>
@@ -309,19 +348,49 @@
       setLoading(true);
       const data = await api(`/api/inventory/${id}`);
       const item = data.item;
+      const movements = Array.isArray(data.movements)
+        ? data.movements
+        : (Array.isArray(data.adjustments) ? data.adjustments.map((entry) => ({
+          ...entry,
+          movement_type: "adjustment",
+          reference_code: entry.reference_code || `ADJ-${entry.id}`,
+          quantity_change: entry.difference,
+          balance_after: entry.new_quantity,
+        })) : []);
+      const movementRows = movements.length ? `
+        <div class="table-wrap">
+          <table>
+            <caption class="sr-only">Lịch sử biến động tồn kho của ${escapeHtml(item.name)}</caption>
+            <thead><tr><th>Loại biến động</th><th>Chứng từ</th><th class="number">Thay đổi</th><th class="number">Tồn sau</th><th>Thời gian</th></tr></thead>
+            <tbody>${movements.map((entry) => {
+              const change = Number(entry.quantity_change ?? 0);
+              const differenceClass = change > 0 ? "positive" : change < 0 ? "negative" : "";
+              return `<tr>
+                <td><span class="badge info">${escapeHtml(statusLabel(entry.movement_type || "adjustment"))}</span>${entry.reason ? `<span class="cell-subtitle">${escapeHtml(entry.reason)}</span>` : ""}</td>
+                <td><span class="sku">${escapeHtml(entry.reference_code || "—")}</span></td>
+                <td class="number"><span class="difference ${differenceClass}">${change > 0 ? "+" : ""}${formatNumber(change)}</span></td>
+                <td class="number">${formatNumber(entry.balance_after ?? 0)} ${escapeHtml(item.unit)}</td>
+                <td>${formatDateTime(entry.created_at)}</td>
+              </tr>`;
+            }).join("")}</tbody>
+          </table>
+        </div>`
+        : '<div class="empty-state" role="status">Chưa có biến động tồn kho.</div>';
       $("#inventory-detail").innerHTML = `
         <div class="detail-hero"><div><span class="sku">${escapeHtml(item.sku)}</span><h3>${escapeHtml(item.name)}</h3></div><div class="detail-quantity"><strong>${formatNumber(item.quantity)}</strong><small>${escapeHtml(item.unit)} hiện có</small></div></div>
         <div class="detail-grid">
           <div class="detail-field"><small>DANH MỤC</small><strong>${escapeHtml(item.category_name)}</strong></div>
           <div class="detail-field"><small>KHO</small><strong>${escapeHtml(item.warehouse_name)}</strong></div>
           <div class="detail-field"><small>VỊ TRÍ</small><strong>${escapeHtml(item.location || "—")}</strong></div>
+          <div class="detail-field"><small>TỒN KHẢ DỤNG</small><strong>${formatNumber(item.available_quantity ?? item.quantity)} ${escapeHtml(item.unit)}</strong></div>
           <div class="detail-field"><small>NGƯỠNG TỐI THIỂU</small><strong>${formatNumber(item.min_quantity)} ${escapeHtml(item.unit)}</strong></div>
           <div class="detail-field"><small>TRẠNG THÁI</small><strong>${statusBadge(item)}</strong></div>
           <div class="detail-field"><small>CẬP NHẬT</small><strong>${formatDateTime(item.updated_at)}</strong></div>
         </div>
-        <h3 class="history-title">Lịch sử điều chỉnh gần nhất</h3>
-        <div>${data.adjustments.length ? data.adjustments.map((entry) => `
-          <div class="history-row"><div><b>${escapeHtml(entry.reason)}</b><br><span>${escapeHtml(entry.created_by_name)} · ${formatDateTime(entry.created_at)}${entry.note ? ` · ${escapeHtml(entry.note)}` : ""}</span></div><div class="difference ${entry.difference > 0 ? "positive" : "negative"}">${entry.difference > 0 ? "+" : ""}${formatNumber(entry.difference)}</div></div>`).join("") : '<div class="empty-state">Chưa có lịch sử điều chỉnh.</div>'}</div>`;
+        <section aria-labelledby="inventory-history-title" aria-live="polite">
+          <h3 class="history-title" id="inventory-history-title">Lịch sử biến động tồn kho</h3>
+          ${movementRows}
+        </section>`;
       openModal($("#inventory-modal"));
     } catch (error) {
       toast(error.message, "error");
@@ -352,6 +421,7 @@
     $("#adjust-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget;
+      if (!form.reportValidity()) return;
       clearErrors(form);
       const data = formData(form);
       const button = $('button[type="submit"]', form);
@@ -375,15 +445,22 @@
 
   async function loadCategories() {
     const search = $("#category-search").value.trim();
-    const data = await api(`/api/categories?search=${encodeURIComponent(search)}`);
-    state.categories = data.items;
-    $("#category-count").textContent = `${data.items.length} danh mục`;
-    const canEdit = ["admin", "manager", "cs"].includes(role);
-    $("#category-body").innerHTML = data.items.length ? data.items.map((item) => `
-      <tr><td><span class="sku">${escapeHtml(item.code)}</span></td><td><span class="cell-title">${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.description || "—")}</td><td class="number">${formatNumber(item.product_count)}</td><td><span class="badge ${item.status}">${item.status === "active" ? "Hoạt động" : "Ngừng hoạt động"}</span></td><td><div class="table-actions">${canEdit ? `<button class="action-button category-edit" data-id="${item.id}" type="button">Sửa</button>` : ""}${role === "admin" ? `<button class="action-button danger category-delete" data-id="${item.id}" type="button">Xóa</button>` : ""}</div></td></tr>`).join("")
-      : '<tr><td colspan="6"><div class="empty-state">Không có danh mục phù hợp.</div></td></tr>';
-    $$(".category-edit").forEach((button) => button.addEventListener("click", () => editCategory(button.dataset.id)));
-    $$(".category-delete").forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.id)));
+    const body = $("#category-body");
+    body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Đang tải danh mục…</div></td></tr>';
+    try {
+      const data = await api(`/api/categories?search=${encodeURIComponent(search)}`);
+      state.categories = data.items;
+      $("#category-count").textContent = `${data.items.length} danh mục`;
+      const canEdit = ["admin", "manager", "cs"].includes(role);
+      body.innerHTML = data.items.length ? data.items.map((item) => `
+        <tr><td><span class="sku">${escapeHtml(item.code)}</span></td><td><span class="cell-title">${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.description || "—")}</td><td class="number">${formatNumber(item.product_count)}</td><td><span class="badge ${item.status}">${item.status === "active" ? "Hoạt động" : "Ngừng hoạt động"}</span></td><td><div class="table-actions">${canEdit ? `<button class="action-button category-edit" data-id="${item.id}" type="button">Sửa</button>` : ""}${role === "admin" ? `<button class="action-button danger category-delete" data-id="${item.id}" type="button">Xóa</button>` : ""}</div></td></tr>`).join("")
+        : '<tr><td colspan="6"><div class="empty-state">Không có danh mục phù hợp.</div></td></tr>';
+      $$(".category-edit", body).forEach((button) => button.addEventListener("click", () => editCategory(button.dataset.id)));
+      $$(".category-delete", body).forEach((button) => button.addEventListener("click", () => deleteCategory(button.dataset.id)));
+    } catch (error) {
+      body.innerHTML = `<tr><td colspan="6"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-categories" type="button">Thử lại</button></div></td></tr>`;
+      $(".retry-categories", body)?.addEventListener("click", loadCategories);
+    }
   }
 
   function editCategory(id) {
@@ -397,7 +474,7 @@
 
   async function deleteCategory(id) {
     const item = state.categories.find((entry) => entry.id === Number(id));
-    if (!window.confirm(`Xóa danh mục “${item.name}”? Thao tác này không thể hoàn tác.`)) return;
+    if (!await confirmAction(`Xóa danh mục “${item.name}”? Danh mục đã phát sinh nghiệp vụ sẽ được hệ thống bảo vệ.`, "Xóa danh mục")) return;
     try {
       const result = await api(`/api/categories/${id}`, { method: "DELETE" });
       toast(result.message); await loadCategories();
@@ -414,6 +491,7 @@
     $("#category-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget; clearErrors(form);
+      if (!form.reportValidity()) return;
       const data = formData(form); const id = data.id; delete data.id;
       const button = $('button[type="submit"]', form); setButtonBusy(button, true);
       try {
@@ -427,17 +505,24 @@
 
   async function loadUsers() {
     const search = $("#user-search").value.trim();
-    const data = await api(`/api/users?search=${encodeURIComponent(search)}`);
-    state.users = data.items;
-    $("#user-count").textContent = `${data.items.length} người dùng`;
-    $("#user-body").innerHTML = data.items.length ? data.items.map((item) => `
-      <tr><td><div style="display:flex;align-items:center;gap:9px"><span class="avatar">${escapeHtml(item.avatar_initials)}</span><div><span class="cell-title">${escapeHtml(item.full_name)}</span><span class="cell-subtitle">@${escapeHtml(item.username)}</span></div></div></td>
-      <td><span class="cell-title">${escapeHtml(item.email)}</span><span class="cell-subtitle">${escapeHtml(item.phone || "Chưa cập nhật")}</span></td>
-      <td><span class="badge info">${escapeHtml(item.role_label)}</span></td><td><span class="badge ${item.status}">${item.status === "active" ? "Hoạt động" : "Đã khóa"}</span></td>
-      <td>${formatDateTime(item.created_at)}</td><td><div class="table-actions"><button class="action-button user-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button danger user-delete" data-id="${item.id}" type="button">Xóa</button></div></td></tr>`).join("")
-      : '<tr><td colspan="6"><div class="empty-state">Không có người dùng phù hợp.</div></td></tr>';
-    $$(".user-edit").forEach((button) => button.addEventListener("click", () => editUser(button.dataset.id)));
-    $$(".user-delete").forEach((button) => button.addEventListener("click", () => deleteUser(button.dataset.id)));
+    const body = $("#user-body");
+    body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Đang tải người dùng…</div></td></tr>';
+    try {
+      const data = await api(`/api/users?search=${encodeURIComponent(search)}`);
+      state.users = data.items;
+      $("#user-count").textContent = `${data.items.length} người dùng`;
+      body.innerHTML = data.items.length ? data.items.map((item) => `
+        <tr><td><div style="display:flex;align-items:center;gap:9px"><span class="avatar">${escapeHtml(item.avatar_initials)}</span><div><span class="cell-title">${escapeHtml(item.full_name)}</span><span class="cell-subtitle">@${escapeHtml(item.username)}</span></div></div></td>
+        <td><span class="cell-title">${escapeHtml(item.email)}</span><span class="cell-subtitle">${escapeHtml(item.phone || "Chưa cập nhật")}</span></td>
+        <td><span class="badge info">${escapeHtml(item.role_label)}</span></td><td><span class="badge ${item.status}">${item.status === "active" ? "Hoạt động" : "Đã khóa"}</span></td>
+        <td>${formatDateTime(item.created_at)}</td><td><div class="table-actions"><button class="action-button user-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button danger user-delete" data-id="${item.id}" type="button">Xóa</button></div></td></tr>`).join("")
+        : '<tr><td colspan="6"><div class="empty-state">Không có người dùng phù hợp.</div></td></tr>';
+      $$(".user-edit", body).forEach((button) => button.addEventListener("click", () => editUser(button.dataset.id)));
+      $$(".user-delete", body).forEach((button) => button.addEventListener("click", () => deleteUser(button.dataset.id)));
+    } catch (error) {
+      body.innerHTML = `<tr><td colspan="6"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-users" type="button">Thử lại</button></div></td></tr>`;
+      $(".retry-users", body)?.addEventListener("click", loadUsers);
+    }
   }
 
   function editUser(id) {
@@ -445,12 +530,13 @@
     const form = $("#user-form"); form.reset(); clearErrors(form);
     Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
     form.elements.password.value = ""; $("#password-required").classList.add("hidden");
+    form.elements.password.required = false;
     $("#user-modal-title").textContent = "Cập nhật người dùng"; openModal($("#user-modal"));
   }
 
   async function deleteUser(id) {
     const item = state.users.find((entry) => entry.id === Number(id));
-    if (!window.confirm(`Xóa tài khoản “${item.username}”? Nếu tài khoản có lịch sử nghiệp vụ, hệ thống sẽ từ chối xóa.`)) return;
+    if (!await confirmAction(`Xóa tài khoản “${item.username}”? Nếu tài khoản có lịch sử nghiệp vụ, hệ thống sẽ từ chối xóa.`, "Xóa tài khoản")) return;
     try { const result = await api(`/api/users/${id}`, { method: "DELETE" }); toast(result.message); await loadUsers(); }
     catch (error) { toast(error.message, "error"); }
   }
@@ -460,11 +546,13 @@
     $("#user-search").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(loadUsers, 250); });
     $("#user-add").addEventListener("click", () => {
       const form = $("#user-form"); form.reset(); clearErrors(form); form.elements.id.value = "";
+      form.elements.password.required = true;
       $("#password-required").classList.remove("hidden"); $("#user-modal-title").textContent = "Thêm người dùng"; openModal($("#user-modal"));
     });
     $("#user-form").addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = event.currentTarget; clearErrors(form);
+      if (!form.reportValidity()) return;
       const data = formData(form); const id = data.id; delete data.id;
       const button = $('button[type="submit"]', form); setButtonBusy(button, true);
       try {
@@ -480,6 +568,7 @@
     const form = $(selector);
     form.addEventListener("submit", async (event) => {
       event.preventDefault(); clearErrors(form);
+      if (!form.reportValidity()) return;
       const button = $('button[type="submit"]', form); setButtonBusy(button, true);
       try {
         const result = await api(endpoint, { method: "PUT", body: JSON.stringify(formData(form)) });
@@ -526,6 +615,8 @@
       draft: "Nháp", pending: "Chờ xác nhận", picking: "Đang lấy hàng",
       completed: "Hoàn tất", rejected: "Từ chối", cancelled: "Đã hủy",
       active: "Hoạt động", inactive: "Ngừng hoạt động",
+      inbound: "Nhập kho", outbound: "Xuất kho", stocktake: "Kiểm kê",
+      adjustment: "Điều chỉnh",
     })[status] || status;
   }
 
@@ -557,6 +648,16 @@
     });
   }
 
+  function printSection(kind) {
+    document.body.classList.add(`print-${kind}`);
+    const cleanup = () => {
+      document.body.classList.remove(`print-${kind}`);
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+    window.print();
+  }
+
   async function initProducts() {
     const lookups = await getOperationLookups();
     const filters = $("#product-filters");
@@ -575,13 +676,31 @@
       body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Đang tải hàng hóa…</div></td></tr>';
       try {
         const data = await api(`/api/products?${query}`);
+        state.products = data.items;
         body.innerHTML = data.items.length ? data.items.map((item) => `<tr>
           <td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-subtitle">${escapeHtml(item.barcode || "Chưa có barcode")}</span></td>
           <td><span class="cell-title">${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.category_name)}</td>
           <td>${escapeHtml(item.unit)}</td><td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span><span class="cell-subtitle">${escapeHtml(item.location || "Chưa xếp vị trí")}</span></td>
           <td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td>
-          <td>${["admin", "manager", "cs"].includes(role) ? '<button class="action-button" type="button" disabled title="Chỉnh sửa được khóa để bảo toàn lịch sử">Đã lưu</button>' : ""}</td></tr>`).join("")
+          <td>${["admin", "manager", "cs"].includes(role) ? `<div class="table-actions"><button class="action-button product-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button ${item.status === "active" ? "danger" : ""} product-toggle" data-id="${item.id}" type="button">${item.status === "active" ? "Ngừng" : "Kích hoạt"}</button></div>` : ""}</td></tr>`).join("")
           : '<tr><td colspan="7"><div class="empty-state">Không tìm thấy hàng hóa phù hợp.</div></td></tr>';
+        $$(".product-edit", body).forEach((button) => button.addEventListener("click", () => {
+          const item = state.products.find((entry) => entry.id === Number(button.dataset.id));
+          if (!item) return;
+          const form = $("#product-form"); form.reset(); clearErrors(form);
+          Object.entries(item).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
+          $("#product-modal-title").textContent = "Cập nhật hàng hóa";
+          openModal($("#product-modal"));
+        }));
+        $$(".product-toggle", body).forEach((button) => button.addEventListener("click", async () => {
+          const item = state.products.find((entry) => entry.id === Number(button.dataset.id));
+          const next = item.status === "active" ? "inactive" : "active";
+          if (!await confirmAction(`${next === "inactive" ? "Ngừng" : "Kích hoạt"} hàng hóa “${item.name}”?`, next === "inactive" ? "Ngừng hoạt động" : "Kích hoạt")) return;
+          try {
+            const result = await api(`/api/products/${item.id}`, { method: "PUT", body: JSON.stringify({ ...item, status: next }) });
+            toast(result.message); operationLookups = null; await load();
+          } catch (error) { toast(error.message, "error"); }
+        }));
       } catch (error) {
         body.innerHTML = `<tr><td colspan="7"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-products" type="button">Thử lại</button></div></td></tr>`;
         $(".retry-products")?.addEventListener("click", load);
@@ -592,7 +711,8 @@
     filters.addEventListener("change", load);
     filters.addEventListener("reset", () => window.setTimeout(load));
     $("#product-add")?.addEventListener("click", () => {
-      $("#product-form").reset(); clearErrors($("#product-form")); openModal($("#product-modal"));
+      $("#product-form").reset(); clearErrors($("#product-form")); $("#product-form").elements.id.value = "";
+      $("#product-modal-title").textContent = "Thêm hàng hóa"; openModal($("#product-modal"));
     });
     $("#product-form")?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -601,7 +721,8 @@
       clearErrors(form);
       const button = $('button[type="submit"]', form); setButtonBusy(button, true);
       try {
-        const result = await api("/api/products", { method: "POST", body: JSON.stringify(formData(form)) });
+        const payload = formData(form); const id = payload.id; delete payload.id;
+        const result = await api(id ? `/api/products/${id}` : "/api/products", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
         closeModal($("#product-modal")); toast(result.message); operationLookups = null; await load();
       } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
@@ -619,23 +740,48 @@
       body.innerHTML = '<tr><td colspan="6"><div class="empty-state">Đang tải đối tác…</div></td></tr>';
       try {
         const data = await api(`/api/${type}?search=${encodeURIComponent(search.value.trim())}`);
+        state.partners = data.items;
         $("#partner-count").textContent = `${data.items.length} đối tác`;
         body.innerHTML = data.items.length ? data.items.map((item) => `<tr><td><span class="sku">${escapeHtml(item.code)}</span></td>
           <td><span class="cell-title">${escapeHtml(item.name)}</span></td><td><span class="cell-title">${escapeHtml(item.email || "—")}</span><span class="cell-subtitle">${escapeHtml(item.phone || "Chưa có số điện thoại")}</span></td>
           <td>${escapeHtml(type === "customers" ? item.contract_emails : item.address || "—")}</td><td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td>
-          <td><span class="cell-subtitle">Mã #${item.id}</span></td></tr>`).join("")
+          <td>${["admin", "manager", "cs"].includes(role) ? `<div class="table-actions"><button class="action-button partner-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button ${item.status === "active" ? "danger" : ""} partner-toggle" data-id="${item.id}" type="button">${item.status === "active" ? "Ngừng" : "Kích hoạt"}</button></div>` : ""}</td></tr>`).join("")
           : '<tr><td colspan="6"><div class="empty-state">Chưa có đối tác phù hợp.</div></td></tr>';
-      } catch (error) { body.innerHTML = `<tr><td colspan="6"><div class="empty-state error-state">${escapeHtml(error.message)}</div></td></tr>`; }
+        $$(".partner-edit", body).forEach((button) => button.addEventListener("click", () => {
+          const item = state.partners.find((entry) => entry.id === Number(button.dataset.id));
+          const form = $("#partner-form"); form.reset(); clearErrors(form);
+          Object.entries(item || {}).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
+          $("#partner-modal-title").textContent = `Cập nhật ${type === "customers" ? "khách hàng" : "nhà cung cấp"}`;
+          openModal($("#partner-modal"));
+        }));
+        $$(".partner-toggle", body).forEach((button) => button.addEventListener("click", async () => {
+          const item = state.partners.find((entry) => entry.id === Number(button.dataset.id));
+          const next = item.status === "active" ? "inactive" : "active";
+          if (!await confirmAction(`${next === "inactive" ? "Ngừng" : "Kích hoạt"} đối tác “${item.name}”?`, next === "inactive" ? "Ngừng hoạt động" : "Kích hoạt")) return;
+          try {
+            const result = await api(`/api/${type}/${item.id}`, { method: "PUT", body: JSON.stringify({ ...item, status: next }) });
+            toast(result.message); operationLookups = null; await load();
+          } catch (error) { toast(error.message, "error"); }
+        }));
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="6"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-partners" type="button">Thử lại</button></div></td></tr>`;
+        $(".retry-partners", body)?.addEventListener("click", load);
+      }
     };
     let timer;
     search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 250); });
-    $("#partner-add")?.addEventListener("click", () => { $("#partner-form").reset(); clearErrors($("#partner-form")); openModal($("#partner-modal")); });
+    $("#partner-add")?.addEventListener("click", () => {
+      $("#partner-form").reset(); clearErrors($("#partner-form")); $("#partner-form").elements.id.value = "";
+      $("#partner-modal-title").textContent = `Thêm ${type === "customers" ? "khách hàng" : "nhà cung cấp"}`;
+      openModal($("#partner-modal"));
+    });
     $("#partner-form")?.addEventListener("submit", async (event) => {
       event.preventDefault(); const form = event.currentTarget;
       if (!form.reportValidity()) return;
       const button = $('button[type="submit"]', form); setButtonBusy(button, true); clearErrors(form);
       try {
-        const result = await api(`/api/${type}`, { method: "POST", body: JSON.stringify(formData(form)) });
+        const payload = formData(form); const id = payload.id; delete payload.id;
+        const result = await api(id ? `/api/${type}/${id}` : `/api/${type}`, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
         closeModal($("#partner-modal")); toast(result.message); operationLookups = null; await load();
       } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
@@ -645,14 +791,51 @@
 
   async function initWarehouses() {
     const grid = $("#warehouse-grid");
-    try {
-      const data = await api("/api/warehouses");
-      grid.innerHTML = data.items.length ? data.items.map((item) => `<article class="panel warehouse-card">
-        <div class="warehouse-symbol" aria-hidden="true">▣</div><div><span class="sku">${escapeHtml(item.code)}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.address || "Chưa cập nhật địa chỉ")}</p></div>
-        <dl><div><dt>Mặt hàng</dt><dd>${formatNumber(item.product_count)}</dd></div><div><dt>Tổng số lượng</dt><dd>${formatNumber(item.total_quantity)}</dd></div></dl>
-        <span class="badge ${item.status}">${statusLabel(item.status)}</span></article>`).join("")
-        : '<div class="panel empty-state">Chưa có kho hàng.</div>';
-    } catch (error) { grid.innerHTML = `<div class="panel empty-state error-state">${escapeHtml(error.message)}</div>`; }
+    const load = async () => {
+      try {
+        const data = await api("/api/warehouses");
+        state.warehouses = data.items;
+        grid.innerHTML = data.items.length ? data.items.map((item) => `<article class="panel warehouse-card">
+          <div class="warehouse-symbol" aria-hidden="true">▣</div><div><span class="sku">${escapeHtml(item.code)}</span><h2>${escapeHtml(item.name)}</h2><p>${escapeHtml(item.address || "Chưa cập nhật địa chỉ")}</p></div>
+          <dl><div><dt>Mặt hàng</dt><dd>${formatNumber(item.product_count)}</dd></div><div><dt>Tổng số lượng</dt><dd>${formatNumber(item.total_quantity)}</dd></div></dl>
+          <div class="card-actions"><span class="badge ${item.status}">${statusLabel(item.status)}</span>${role === "admin" ? `<button class="action-button warehouse-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button ${item.status === "active" ? "danger" : ""} warehouse-toggle" data-id="${item.id}" type="button">${item.status === "active" ? "Ngừng" : "Kích hoạt"}</button>` : ""}</div></article>`).join("")
+          : '<div class="panel empty-state">Chưa có kho hàng.</div>';
+        $$(".warehouse-edit", grid).forEach((button) => button.addEventListener("click", () => {
+          const item = state.warehouses.find((entry) => entry.id === Number(button.dataset.id));
+          const form = $("#warehouse-form"); form.reset(); clearErrors(form);
+          Object.entries(item || {}).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
+          $("#warehouse-modal-title").textContent = "Cập nhật kho"; openModal($("#warehouse-modal"));
+        }));
+        $$(".warehouse-toggle", grid).forEach((button) => button.addEventListener("click", async () => {
+          const item = state.warehouses.find((entry) => entry.id === Number(button.dataset.id));
+          const next = item.status === "active" ? "inactive" : "active";
+          if (!await confirmAction(`${next === "inactive" ? "Ngừng" : "Kích hoạt"} kho “${item.name}”?`, next === "inactive" ? "Ngừng hoạt động" : "Kích hoạt")) return;
+          try {
+            const result = await api(`/api/warehouses/${item.id}`, { method: "PUT", body: JSON.stringify({ ...item, status: next }) });
+            toast(result.message); operationLookups = null; await load();
+          } catch (error) { toast(error.message, "error"); }
+        }));
+      } catch (error) {
+        grid.innerHTML = `<div class="panel empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-warehouses" type="button">Thử lại</button></div>`;
+        $(".retry-warehouses", grid)?.addEventListener("click", load);
+      }
+    };
+    $("#warehouse-add")?.addEventListener("click", () => {
+      const form = $("#warehouse-form"); form.reset(); clearErrors(form); form.elements.id.value = "";
+      $("#warehouse-modal-title").textContent = "Thêm kho"; openModal($("#warehouse-modal"));
+    });
+    $("#warehouse-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault(); const form = event.currentTarget;
+      if (!form.reportValidity()) return;
+      clearErrors(form); const payload = formData(form); const id = payload.id; delete payload.id;
+      const button = $('button[type="submit"]', form); setButtonBusy(button, true);
+      try {
+        const result = await api(id ? `/api/warehouses/${id}` : "/api/warehouses", { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
+        closeModal($("#warehouse-modal")); toast(result.message); operationLookups = null; await load();
+      } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
+      finally { setButtonBusy(button, false); }
+    });
+    await load();
   }
 
   let scannerStream;
@@ -662,6 +845,8 @@
     clearInterval(scannerTimer);
     scannerStream?.getTracks().forEach((track) => track.stop());
     scannerStream = null;
+    const video = $("#scanner-video");
+    if (video) video.srcObject = null;
   }
   async function openScanner(targetId) {
     scannerTarget = document.getElementById(targetId);
@@ -669,6 +854,7 @@
     $("#scanner-manual").value = "";
     openModal(modal);
     const help = $("#scanner-help");
+    help.textContent = "Hướng camera vào barcode. Nếu trình duyệt không hỗ trợ, dùng máy quét USB hoặc nhập tay bên dưới.";
     if (!("BarcodeDetector" in window) || !navigator.mediaDevices?.getUserMedia) {
       help.textContent = "Camera barcode chưa được trình duyệt hỗ trợ. Hãy dùng máy quét USB hoặc nhập mã thủ công.";
       $("#scanner-manual").focus();
@@ -703,12 +889,12 @@
     $$(".scanner-close").forEach((button) => button.addEventListener("click", stopScanner));
   }
 
-  function receiptLine(lookups, index) {
-    return `<tr class="line-row"><td><select name="inventory_id" required aria-label="Hàng hóa dòng ${index + 1}">${optionList(lookups.products, "Chọn hàng hóa")}</select></td>
-      <td><input name="quantity" type="number" min="1" step="1" required aria-label="Số lượng dòng ${index + 1}"></td>
-      <td><input name="pallet_id" maxlength="50" aria-label="Pallet dòng ${index + 1}"></td>
-      <td><div class="input-action"><input id="line-barcode-${index}" name="barcode" maxlength="50" aria-label="Barcode dòng ${index + 1}"><button class="icon-button scan-trigger" type="button" data-target="line-barcode-${index}" aria-label="Quét barcode">⌗</button></div></td>
-      <td><input name="expiry_date" type="date" aria-label="Hạn dùng dòng ${index + 1}"></td>
+  function receiptLine(lookups, index, item = {}) {
+    return `<tr class="line-row"><td><select name="inventory_id" required aria-label="Hàng hóa dòng ${index + 1}">${optionList(lookups.products, "Chọn hàng hóa", item.inventory_id)}</select></td>
+      <td><input name="quantity" type="number" min="1" step="1" value="${escapeHtml(item.quantity || "")}" required aria-label="Số lượng dòng ${index + 1}"></td>
+      <td><input name="pallet_id" maxlength="50" value="${escapeHtml(item.pallet_id || "")}" aria-label="Pallet dòng ${index + 1}"></td>
+      <td><div class="input-action"><input id="line-barcode-${index}" name="barcode" maxlength="50" value="${escapeHtml(item.barcode || "")}" aria-label="Barcode dòng ${index + 1}"><button class="icon-button scan-trigger" type="button" data-target="line-barcode-${index}" aria-label="Quét barcode">⌗</button></div></td>
+      <td><input name="expiry_date" type="date" value="${escapeHtml(item.expiry_date || "")}" aria-label="Hạn dùng dòng ${index + 1}"></td>
       <td><button class="action-button danger line-remove" type="button" aria-label="Xóa dòng">×</button></td></tr>`;
   }
 
@@ -718,18 +904,31 @@
     const endpoint = `/api/${type}-receipts`;
     const lookups = await getOperationLookups();
     const form = $("#receipt-form");
+    let currentReceipt = null;
+    let lineSerial = 0;
     form.elements.partner_id.innerHTML = optionList(type === "inbound" ? lookups.suppliers : lookups.customers, "Chọn đối tác");
     form.elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Chọn kho");
-    const addLine = () => {
-      const index = $$(".line-row", $("#line-body")).length;
-      $("#line-body").insertAdjacentHTML("beforeend", receiptLine(lookups, index));
+    const addLine = (item = {}) => {
+      const index = lineSerial++;
+      const warehouseId = Number(form.elements.warehouse_id.value);
+      const scopedLookups = { ...lookups, products: warehouseId ? lookups.products.filter((product) => Number(product.warehouse_id) === warehouseId) : lookups.products };
+      $("#line-body").insertAdjacentHTML("beforeend", receiptLine(scopedLookups, index, item));
       const row = $("#line-body tr:last-child");
       $(".line-remove", row).addEventListener("click", () => row.remove());
       $(".scan-trigger", row).addEventListener("click", (event) => openScanner(event.currentTarget.dataset.target));
     };
+    form.elements.warehouse_id.addEventListener("change", () => {
+      const warehouseId = Number(form.elements.warehouse_id.value);
+      $$(".line-row", form).forEach((row) => {
+        const select = $('[name="inventory_id"]', row); const selected = select.value;
+        const products = warehouseId ? lookups.products.filter((product) => Number(product.warehouse_id) === warehouseId) : lookups.products;
+        select.innerHTML = optionList(products, "Chọn hàng hóa", selected);
+      });
+    });
     $("#line-add").addEventListener("click", addLine);
     const load = async () => {
       const query = new URLSearchParams(formData($("#receipt-filters")));
+      if ($("#receipt-filters").dataset.page) query.set("page", $("#receipt-filters").dataset.page);
       const body = $("#receipt-body");
       body.innerHTML = '<tr><td colspan="7"><div class="empty-state">Đang tải chứng từ…</div></td></tr>';
       try {
@@ -741,24 +940,53 @@
           <td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td><td>${formatDateTime(item.created_at)}</td><td><button class="action-button receipt-view" data-id="${item.id}" type="button">Chi tiết</button></td></tr>`).join("")
           : '<tr><td colspan="7"><div class="empty-state">Chưa có phiếu phù hợp.</div></td></tr>';
         $$(".receipt-view").forEach((button) => button.addEventListener("click", () => showReceipt(button.dataset.id)));
-      } catch (error) { body.innerHTML = `<tr><td colspan="7"><div class="empty-state error-state">${escapeHtml(error.message)}</div></td></tr>`; }
+        const pg = data.pagination;
+        if (pg?.total != null) {
+          const start = pg.total ? (pg.page - 1) * pg.per_page + 1 : 0;
+          $("#receipt-range").textContent = `Hiển thị ${start}–${Math.min(pg.page * pg.per_page, pg.total)} trong ${pg.total} phiếu`;
+          pagination($("#receipt-pagination"), pg, (target) => {
+            $("#receipt-filters").dataset.page = target;
+            load();
+          });
+        } else {
+          $("#receipt-range").textContent = `${data.items.length} phiếu`;
+          $("#receipt-pagination").innerHTML = "";
+        }
+      } catch (error) {
+        body.innerHTML = `<tr><td colspan="7"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-receipts" type="button">Thử lại</button></div></td></tr>`;
+        $(".retry-receipts", body)?.addEventListener("click", load);
+      }
     };
     async function showReceipt(id) {
       try {
         setLoading(true);
         const data = await api(`${endpoint}/${id}`); const item = data.item;
+        currentReceipt = item;
         $("#receipt-detail-modal").dataset.id = id;
         $("#receipt-detail").innerHTML = `<div class="document-head"><div><span class="brand-mark">DN</span><p>DNP LOGISTICS<br><small>Warehouse Management System</small></p></div><div><span class="eyebrow">${type === "inbound" ? "PHIẾU NHẬP KHO" : "PHIẾU XUẤT KHO"}</span><h2>${escapeHtml(item.code)}</h2></div></div>
-          <div class="detail-grid"><div class="detail-field"><small>ĐỐI TÁC</small><strong>${escapeHtml(item.partner_name)}</strong></div><div class="detail-field"><small>KHO</small><strong>${escapeHtml(item.warehouse_name)}</strong></div><div class="detail-field"><small>TRẠNG THÁI</small><strong><span class="badge ${item.status}">${statusLabel(item.status)}</span></strong></div><div class="detail-field"><small>NGƯỜI LẬP</small><strong>${escapeHtml(item.created_by_name)}</strong></div></div>
-          <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Hàng hóa</th><th>Pallet</th><th>Barcode</th><th class="number">Số lượng</th><th>Đơn vị</th></tr></thead><tbody>${item.items.map((line) => `<tr><td><span class="sku">${escapeHtml(line.sku)}</span></td><td>${escapeHtml(line.name)}</td><td>${escapeHtml(line.pallet_id || "—")}</td><td>${escapeHtml(line.barcode || "—")}</td><td class="number"><b>${formatNumber(line.quantity)}</b></td><td>${escapeHtml(line.unit)}</td></tr>`).join("")}</tbody></table></div>
+          <div class="detail-grid"><div class="detail-field"><small>ĐỐI TÁC</small><strong>${escapeHtml(item.partner_name)}</strong></div><div class="detail-field"><small>KHO</small><strong>${escapeHtml(item.warehouse_name)}</strong></div><div class="detail-field"><small>TRẠNG THÁI</small><strong><span class="badge ${item.status}">${statusLabel(item.status)}</span></strong></div><div class="detail-field"><small>NGƯỜI LẬP</small><strong>${escapeHtml(item.created_by_name)}</strong></div>${item.request_email ? `<div class="detail-field"><small>EMAIL YÊU CẦU</small><strong>${escapeHtml(item.request_email)}</strong></div>` : ""}${item.container_no ? `<div class="detail-field"><small>CONTAINER / SEAL</small><strong>${escapeHtml(item.container_no)} · ${escapeHtml(item.seal_no || "—")}</strong></div>` : ""}</div>
+          <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Hàng hóa</th><th>Pallet</th><th>Barcode</th><th class="number">Chứng từ</th>${type === "inbound" ? '<th class="number">Thực nhận</th><th>Vấn đề</th>' : ""}<th>Đơn vị</th></tr></thead><tbody>${item.items.map((line) => `<tr><td><span class="sku">${escapeHtml(line.sku)}</span></td><td>${escapeHtml(line.name)}</td><td>${escapeHtml(line.pallet_id || "—")}</td><td>${escapeHtml(line.barcode || "—")}</td><td class="number"><b>${formatNumber(line.quantity)}</b></td>${type === "inbound" ? `<td class="number"><b>${formatNumber(line.accepted_quantity)}</b></td><td>${escapeHtml(line.issue_note || "—")}</td>` : ""}<td>${escapeHtml(line.unit)}</td></tr>`).join("")}</tbody></table></div>
           <div class="signature-grid"><div>Người lập phiếu<br><small>(Ký, ghi rõ họ tên)</small></div><div>Nhân viên kho<br><small>(Ký, ghi rõ họ tên)</small></div><div>Người giao/nhận<br><small>(Ký, ghi rõ họ tên)</small></div></div>`;
-        $("#receipt-confirm").classList.toggle("hidden", item.status === "completed" || item.status === "cancelled");
-        $("#receipt-cancel")?.classList.toggle("hidden", item.status === "completed" || item.status === "cancelled");
+        const canConfirm = type === "inbound" ? item.status === "pending" : ["pending", "picking"].includes(item.status);
+        $("#receipt-confirm").classList.toggle("hidden", !canConfirm);
+        $("#receipt-cancel")?.classList.toggle("hidden", !["draft", "pending", "picking"].includes(item.status));
+        $("#receipt-edit")?.classList.toggle("hidden", item.status !== "draft");
+        $("#receipt-inspect")?.classList.toggle("hidden", !["draft", "pending"].includes(item.status));
         openModal($("#receipt-detail-modal"));
       } catch (error) { toast(error.message, "error"); } finally { setLoading(false); }
     }
     $("#receipt-add")?.addEventListener("click", () => {
-      form.reset(); clearErrors(form); $("#line-body").innerHTML = ""; addLine(); openModal($("#receipt-modal"));
+      form.reset(); clearErrors(form); form.elements.id.value = "";
+      $("#line-body").innerHTML = ""; addLine(); $("#receipt-modal-title").textContent = `Tạo phiếu ${type === "inbound" ? "nhập kho" : "xuất kho"}`; openModal($("#receipt-modal"));
+    });
+    $("#receipt-edit")?.addEventListener("click", () => {
+      if (!currentReceipt || currentReceipt.status !== "draft") return;
+      form.reset(); clearErrors(form);
+      const values = { ...currentReceipt, partner_id: currentReceipt.partner_id, id: currentReceipt.id };
+      Object.entries(values).forEach(([key, value]) => { if (form.elements[key]) form.elements[key].value = value ?? ""; });
+      $("#line-body").innerHTML = ""; currentReceipt.items.forEach((item) => addLine(item));
+      $("#receipt-modal-title").textContent = `Cập nhật phiếu ${type === "inbound" ? "nhập kho" : "xuất kho"}`;
+      closeModal($("#receipt-detail-modal")); openModal($("#receipt-modal"));
     });
     form.addEventListener("submit", async (event) => {
       event.preventDefault(); if (!form.reportValidity()) return; clearErrors(form);
@@ -766,7 +994,8 @@
       payload.items = $$(".line-row", form).map(controlsData);
       const button = $('button[type="submit"]', form); setButtonBusy(button, true);
       try {
-        const result = await api(endpoint, { method: "POST", body: JSON.stringify(payload) });
+        const id = payload.id; delete payload.id;
+        const result = await api(id ? `${endpoint}/${id}` : endpoint, { method: id ? "PUT" : "POST", body: JSON.stringify(payload) });
         closeModal($("#receipt-modal")); toast(result.message); await load();
       } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
@@ -779,16 +1008,40 @@
         closeModal($("#receipt-detail-modal")); toast(result.message); await load();
       } catch (error) { toast(error.message, "error"); } finally { setLoading(false); }
     });
+    $("#receipt-inspect")?.addEventListener("click", () => {
+      if (!currentReceipt) return;
+      $("#inspection-body").innerHTML = currentReceipt.items.map((line) => `<tr class="inspection-line" data-id="${line.id}"><td><span class="sku">${escapeHtml(line.sku)}</span><span class="cell-title">${escapeHtml(line.name)}</span></td><td class="number">${formatNumber(line.quantity)} ${escapeHtml(line.unit)}</td><td><input name="accepted_quantity" type="number" min="0" max="${line.quantity}" value="${line.accepted_quantity ?? line.quantity}" required aria-label="Thực nhận ${escapeHtml(line.name)}"></td><td><input name="issue_note" maxlength="300" value="${escapeHtml(line.issue_note || "")}" placeholder="Thiếu, hỏng hoặc bị từ chối"></td></tr>`).join("");
+      openModal($("#inspection-modal"));
+    });
+    $("#inspection-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault(); const inspectForm = event.currentTarget;
+      if (!inspectForm.reportValidity()) return;
+      clearErrors(inspectForm);
+      const items = $$(".inspection-line", inspectForm).map((line) => ({
+        id: Number(line.dataset.id),
+        accepted_quantity: Number($('[name="accepted_quantity"]', line).value),
+        issue_note: $('[name="issue_note"]', line).value,
+      }));
+      const button = $('button[type="submit"]', inspectForm); setButtonBusy(button, true);
+      try {
+        const result = await api(`${endpoint}/${currentReceipt.id}/inspect`, { method: "POST", body: JSON.stringify({ items }) });
+        closeModal($("#inspection-modal")); closeModal($("#receipt-detail-modal")); toast(result.message); await load();
+      } catch (error) { showErrors(inspectForm, error.errors); toast(error.message, "error"); }
+      finally { setButtonBusy(button, false); }
+    });
     $("#receipt-check-stock")?.addEventListener("click", async () => {
       try {
         const result = await api(`${endpoint}/${$("#receipt-detail-modal").dataset.id}/check-stock`);
+        $("#stock-check-result")?.remove();
+        $("#receipt-detail").insertAdjacentHTML("beforeend", `<section class="picking-section" id="stock-check-result"><h3>KẾT QUẢ KIỂM TRA TỒN</h3><div class="table-wrap"><table><thead><tr><th>Hàng hóa</th><th class="number">Yêu cầu</th><th class="number">Khả dụng</th><th>Kết quả</th></tr></thead><tbody>${result.items.map((item) => `<tr><td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-title">${escapeHtml(item.name)}</span></td><td class="number">${formatNumber(item.requested)}</td><td class="number">${formatNumber(item.available)}</td><td><span class="badge ${item.sufficient ? "completed" : "rejected"}">${item.sufficient ? "Đủ tồn" : "Thiếu tồn"}</span></td></tr>`).join("")}</tbody></table></div></section>`);
         toast(result.message, result.sufficient ? "success" : "error", "Kiểm tra tồn kho");
       } catch (error) { toast(error.message, "error"); }
     });
     $("#receipt-picking")?.addEventListener("click", async () => {
       try {
         const result = await api(`${endpoint}/${$("#receipt-detail-modal").dataset.id}/picking-list`);
-        $("#receipt-detail").insertAdjacentHTML("beforeend", `<section class="picking-section"><h3>PICKING LIST · ${escapeHtml(result.receipt_code)}</h3><p>${escapeHtml(result.strategy)}</p><ol>${result.items.map((item) => `<li><b>${escapeHtml(item.sku)}</b> · ${escapeHtml(item.name)} — ${formatNumber(item.quantity)} ${escapeHtml(item.unit)} · Pallet ${escapeHtml(item.pallet_id || "FIFO")}</li>`).join("")}</ol></section>`);
+        $("#picking-result")?.remove();
+        $("#receipt-detail").insertAdjacentHTML("beforeend", `<section class="picking-section" id="picking-result"><h3>PICKING LIST · ${escapeHtml(result.receipt_code)}</h3><p>${escapeHtml(result.strategy)}</p><ol>${result.items.map((item) => `<li><b>${escapeHtml(item.sku)}</b> · ${escapeHtml(item.name)} — ${formatNumber(item.quantity)} ${escapeHtml(item.unit)} · Pallet ${escapeHtml(item.pallet_id || "FIFO")}</li>`).join("")}</ol></section>`);
         toast("Đã tạo picking list. Chọn In phiếu để in.", "success");
       } catch (error) { toast(error.message, "error"); }
     });
@@ -799,11 +1052,12 @@
         closeModal($("#receipt-detail-modal")); toast(result.message); await load();
       } catch (error) { toast(error.message, "error"); }
     });
-    $("#receipt-print").addEventListener("click", () => window.print());
+    $("#receipt-print").addEventListener("click", () => printSection("receipt"));
     let timer;
-    $("#receipt-filters").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 250); });
-    $("#receipt-filters").addEventListener("change", load);
-    $("#receipt-filters").addEventListener("reset", () => setTimeout(load));
+    const resetPageAndLoad = () => { delete $("#receipt-filters").dataset.page; load(); };
+    $("#receipt-filters").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(resetPageAndLoad, 250); });
+    $("#receipt-filters").addEventListener("change", resetPageAndLoad);
+    $("#receipt-filters").addEventListener("reset", () => setTimeout(resetPageAndLoad));
     initScanner(); await load();
   }
 
@@ -815,10 +1069,13 @@
   async function initStocktakes() {
     const lookups = await getOperationLookups();
     const form = $("#stocktake-form");
+    let currentStocktake = null;
     form.elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Chọn kho");
     const addLine = () => {
       const index = $$(".stocktake-line").length;
-      $("#stocktake-line-body").insertAdjacentHTML("beforeend", stocktakeLine(lookups, index));
+      const warehouseId = Number(form.elements.warehouse_id.value);
+      const scopedLookups = { ...lookups, products: warehouseId ? lookups.products.filter((item) => Number(item.warehouse_id) === warehouseId) : lookups.products };
+      $("#stocktake-line-body").insertAdjacentHTML("beforeend", stocktakeLine(scopedLookups, index));
       const row = $("#stocktake-line-body tr:last-child");
       $('[name="inventory_id"]', row).addEventListener("change", (event) => {
         const product = lookups.products.find((item) => item.id === Number(event.target.value));
@@ -827,18 +1084,43 @@
       });
       $(".line-remove", row).addEventListener("click", () => row.remove());
     };
+    form.elements.warehouse_id.addEventListener("change", () => {
+      const warehouseId = Number(form.elements.warehouse_id.value);
+      const products = warehouseId ? lookups.products.filter((item) => Number(item.warehouse_id) === warehouseId) : lookups.products;
+      $$(".stocktake-line", form).forEach((row) => {
+        const select = $('[name="inventory_id"]', row);
+        select.innerHTML = optionList(products, "Chọn hàng hóa", select.value);
+        select.dispatchEvent(new Event("change"));
+      });
+    });
     $("#stocktake-line-add").addEventListener("click", addLine);
     const load = async () => {
       try {
         const data = await api(`/api/stocktakes?search=${encodeURIComponent($("#stocktake-search").value)}`);
-        $("#stocktake-body").innerHTML = data.items.length ? data.items.map((item) => `<tr><td><span class="sku">${escapeHtml(item.code)}</span></td><td>${escapeHtml(item.warehouse_name)}</td><td>${formatNumber(item.item_count)} mặt hàng</td><td><span class="difference ${item.difference > 0 ? "positive" : item.difference < 0 ? "negative" : ""}">${item.difference > 0 ? "+" : ""}${formatNumber(item.difference)}</span></td><td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td><td>${formatDateTime(item.created_at)}</td><td>${item.status === "draft" && ["admin", "manager", "warehouse"].includes(role) ? `<button class="action-button stocktake-confirm" data-id="${item.id}" type="button">Xác nhận</button>` : "—"}</td></tr>`).join("")
+        $("#stocktake-body").innerHTML = data.items.length ? data.items.map((item) => `<tr><td><span class="sku">${escapeHtml(item.code)}</span></td><td>${escapeHtml(item.warehouse_name)}</td><td>${formatNumber(item.item_count)} mặt hàng</td><td><span class="difference ${item.difference > 0 ? "positive" : item.difference < 0 ? "negative" : ""}">${item.difference > 0 ? "+" : ""}${formatNumber(item.difference)}</span></td><td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td><td>${formatDateTime(item.created_at)}</td><td><div class="table-actions"><button class="action-button stocktake-view" data-id="${item.id}" type="button">Chi tiết</button>${item.status === "draft" && ["admin", "manager", "warehouse"].includes(role) ? `<button class="action-button stocktake-confirm" data-id="${item.id}" type="button">Xác nhận</button>` : ""}</div></td></tr>`).join("")
           : '<tr><td colspan="7"><div class="empty-state">Chưa có phiếu kiểm kê.</div></td></tr>';
+        $$(".stocktake-view").forEach((button) => button.addEventListener("click", async () => {
+          try {
+            setLoading(true); const data = await api(`/api/stocktakes/${button.dataset.id}`);
+            currentStocktake = data.item;
+            $("#stocktake-detail").innerHTML = `<div class="document-head"><div><span class="brand-mark">DN</span><p>DNP LOGISTICS<br><small>Warehouse Management System</small></p></div><div><span class="eyebrow">PHIẾU KIỂM KÊ</span><h2>${escapeHtml(currentStocktake.code)}</h2></div></div>
+              <div class="detail-grid"><div class="detail-field"><small>KHO</small><strong>${escapeHtml(currentStocktake.warehouse_name)}</strong></div><div class="detail-field"><small>TRẠNG THÁI</small><strong><span class="badge ${currentStocktake.status}">${statusLabel(currentStocktake.status)}</span></strong></div><div class="detail-field"><small>NGƯỜI LẬP</small><strong>${escapeHtml(currentStocktake.created_by_name || "—")}</strong></div><div class="detail-field"><small>GHI CHÚ</small><strong>${escapeHtml(currentStocktake.note || "—")}</strong></div></div>
+              <div class="table-wrap"><table><thead><tr><th>Hàng hóa</th><th class="number">Tồn hệ thống</th><th class="number">Thực đếm</th><th class="number">Chênh lệch</th><th>Lý do</th></tr></thead><tbody>${(currentStocktake.items || []).map((line) => { const diff = line.counted_quantity - line.system_quantity; return `<tr><td><span class="sku">${escapeHtml(line.sku)}</span><span class="cell-title">${escapeHtml(line.name)}</span></td><td class="number">${formatNumber(line.system_quantity)}</td><td class="number">${formatNumber(line.counted_quantity)}</td><td class="number"><span class="difference ${diff > 0 ? "positive" : diff < 0 ? "negative" : ""}">${diff > 0 ? "+" : ""}${formatNumber(diff)}</span></td><td>${escapeHtml(line.reason || "Không chênh lệch")}</td></tr>`; }).join("")}</tbody></table></div>`;
+            const draft = currentStocktake.status === "draft";
+            $("#stocktake-detail-confirm").classList.toggle("hidden", !draft || !["admin", "manager", "warehouse"].includes(role));
+            $("#stocktake-cancel").classList.toggle("hidden", !draft || !["admin", "manager", "warehouse"].includes(role));
+            openModal($("#stocktake-detail-modal"));
+          } catch (error) { toast(error.message, "error"); } finally { setLoading(false); }
+        }));
         $$(".stocktake-confirm").forEach((button) => button.addEventListener("click", async () => {
           if (!await confirmAction("Xác nhận sẽ điều chỉnh tồn kho theo số thực đếm.", "Duyệt kiểm kê")) return;
           try { const result = await api(`/api/stocktakes/${button.dataset.id}/confirm`, { method: "POST" }); toast(result.message); await load(); }
           catch (error) { toast(error.message, "error"); }
         }));
-      } catch (error) { $("#stocktake-body").innerHTML = `<tr><td colspan="7"><div class="empty-state error-state">${escapeHtml(error.message)}</div></td></tr>`; }
+      } catch (error) {
+        $("#stocktake-body").innerHTML = `<tr><td colspan="7"><div class="empty-state error-state">${escapeHtml(error.message)} <button class="button secondary retry-stocktakes" type="button">Thử lại</button></div></td></tr>`;
+        $(".retry-stocktakes")?.addEventListener("click", load);
+      }
     };
     $("#stocktake-add")?.addEventListener("click", () => { form.reset(); clearErrors(form); $("#stocktake-line-body").innerHTML = ""; addLine(); openModal($("#stocktake-modal")); });
     form.addEventListener("submit", async (event) => {
@@ -850,6 +1132,21 @@
       catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
     });
+    $("#stocktake-detail-confirm")?.addEventListener("click", async () => {
+      if (!currentStocktake || !await confirmAction("Xác nhận sẽ điều chỉnh tồn kho theo số thực đếm.", "Duyệt kiểm kê")) return;
+      try {
+        const result = await api(`/api/stocktakes/${currentStocktake.id}/confirm`, { method: "POST" });
+        closeModal($("#stocktake-detail-modal")); toast(result.message); await load();
+      } catch (error) { toast(error.message, "error"); }
+    });
+    $("#stocktake-cancel")?.addEventListener("click", async () => {
+      if (!currentStocktake || !await confirmAction("Hủy phiếu kiểm kê nháp này?", "Hủy phiếu")) return;
+      try {
+        const result = await api(`/api/stocktakes/${currentStocktake.id}/cancel`, { method: "POST" });
+        closeModal($("#stocktake-detail-modal")); toast(result.message); await load();
+      } catch (error) { toast(error.message, "error"); }
+    });
+    $("#stocktake-print")?.addEventListener("click", () => printSection("stocktake"));
     let timer; $("#stocktake-search").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 250); });
     await load();
   }
@@ -857,9 +1154,17 @@
   async function initReports() {
     const lookups = await getOperationLookups();
     $("#report-filters").elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Tất cả kho");
+    $("#report-filters").elements.product_id.innerHTML = optionList(lookups.products, "Tất cả hàng hóa");
+    $("#report-filters").elements.customer_id.innerHTML = optionList(lookups.customers, "Tất cả khách hàng");
     const load = async () => {
+      const filters = formData($("#report-filters"));
+      if (filters.from && filters.to && filters.from > filters.to) {
+        toast("Ngày bắt đầu không được sau ngày kết thúc.", "error", "Khoảng thời gian chưa hợp lệ");
+        $("#report-to").focus();
+        return;
+      }
       try {
-        const data = await api(`/api/reports/summary?${new URLSearchParams(formData($("#report-filters")))}`);
+        const data = await api(`/api/reports/summary?${new URLSearchParams(filters)}`);
         const cards = [
           ["blue", "Mặt hàng", data.summary.products], ["green", "Tổng tồn", data.summary.stock],
           ["amber", "Cảnh báo", data.summary.alerts], ["purple", "Phiếu hoàn tất", (data.receipt_counts.inbound || 0) + (data.receipt_counts.outbound || 0)],
@@ -872,7 +1177,18 @@
       } catch (error) { toast(error.message, "error"); }
     };
     $("#report-filters").addEventListener("submit", (event) => { event.preventDefault(); load(); });
-    $("#report-print").addEventListener("click", () => window.print());
+    $("#report-export")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      const filters = formData($("#report-filters"));
+      if (filters.from && filters.to && filters.from > filters.to) {
+        toast("Ngày bắt đầu không được sau ngày kết thúc.", "error", "Khoảng thời gian chưa hợp lệ");
+        return;
+      }
+      const query = new URLSearchParams(filters);
+      [...query.entries()].forEach(([key, value]) => { if (!value) query.delete(key); });
+      window.location.assign(`/api/reports/export.csv?${query}`);
+    });
+    $("#report-print").addEventListener("click", () => printSection("report"));
     await load();
   }
 

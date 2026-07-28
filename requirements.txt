@@ -1,2 +1,11 @@
 Flask==3.1.1
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate>=4.0.5,<5
+SQLAlchemy>=2.0.41,<2.1
+alembic>=1.16.4,<2
+python-dotenv>=1.1.1,<2
 pytest==8.4.1
+pytest-cov>=6.2.1,<8
+
+# Required only when DATABASE_URL uses mssql+pyodbc.
+pyodbc>=5.2,<6

@@ -7,7 +7,7 @@
 </div>
 <section class="panel">
   <form class="filter-bar" id="inventory-filters">
-    <label class="search-field"><span class="sr-only">Tìm kiếm</span><input name="search" placeholder="Tìm theo mã SKU hoặc tên hàng…"></label>
+    <label class="search-field"><span class="sr-only">Tìm kiếm</span><input name="search" placeholder="SKU, tên, barcode, pallet hoặc đơn vị…" autocomplete="off"></label>
     <select name="category_id" aria-label="Lọc danh mục"><option value="">Tất cả danh mục</option></select>
     <select name="warehouse_id" aria-label="Lọc kho"><option value="">Tất cả kho</option></select>
     <select name="status" aria-label="Lọc trạng thái">
@@ -37,8 +37,8 @@
     <form id="adjust-form" novalidate>
       <input type="hidden" name="item_id">
       <div class="adjust-summary" id="adjust-summary"></div>
-      <div class="form-group"><label for="new-quantity">Số lượng thực tế *</label><input id="new-quantity" name="new_quantity" type="number" min="0" step="1"><small class="field-error" data-error-for="new_quantity"></small></div>
-      <div class="form-group"><label for="adjust-reason">Lý do *</label><select id="adjust-reason" name="reason"><option value="">Chọn lý do</option><option>Kiểm kê định kỳ</option><option>Hàng hư hỏng</option><option>Sai lệch chứng từ</option><option>Điều chỉnh khác</option></select><small class="field-error" data-error-for="reason"></small></div>
+      <div class="form-group"><label for="new-quantity">Số lượng thực tế *</label><input id="new-quantity" name="new_quantity" type="number" min="0" step="1" required><small class="field-error" data-error-for="new_quantity"></small></div>
+      <div class="form-group"><label for="adjust-reason">Lý do *</label><select id="adjust-reason" name="reason" required><option value="">Chọn lý do</option><option>Kiểm kê định kỳ</option><option>Hàng hư hỏng</option><option>Sai lệch chứng từ</option><option>Điều chỉnh khác</option></select><small class="field-error" data-error-for="reason"></small></div>
       <div class="form-group"><label for="adjust-note">Ghi chú</label><textarea id="adjust-note" name="note" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho lần điều chỉnh"></textarea><small class="field-error" data-error-for="note"></small></div>
       <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Xác nhận điều chỉnh</button></div>
     </form>

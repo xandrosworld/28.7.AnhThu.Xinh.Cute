@@ -5,21 +5,44 @@ import pytest
 
 from app import create_app
 from app.db import get_db, init_database
+from app.extensions import db as orm
 
 
 @pytest.fixture()
 def app():
+    test_database_url = os.environ.get("TEST_DATABASE_URL", "").strip()
+    if test_database_url:
+        app = create_app(
+            {
+                "TESTING": True,
+                "SECRET_KEY": "test-secret",
+                "SQLALCHEMY_DATABASE_URI": test_database_url,
+                "AUTO_INIT_DB": False,
+            }
+        )
+        with app.app_context():
+            init_database()
+        yield app
+        with app.app_context():
+            orm.session.remove()
+            orm.drop_all()
+        return
+
     handle, database_path = tempfile.mkstemp(suffix=".sqlite")
     app = create_app(
         {
             "TESTING": True,
             "SECRET_KEY": "test-secret",
             "DATABASE": database_path,
+            "AUTO_INIT_DB": False,
         }
     )
     with app.app_context():
         init_database()
     yield app
+    with app.app_context():
+        orm.session.remove()
+        orm.engine.dispose()
     os.close(handle)
     os.unlink(database_path)
 

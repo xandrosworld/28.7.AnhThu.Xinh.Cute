@@ -12,4 +12,9 @@
 <div class="table-wrap line-table"><table><thead><tr><th>Hàng hóa *</th><th>Tồn hệ thống</th><th>Thực đếm *</th><th>Lý do chênh lệch</th><th></th></tr></thead><tbody id="stocktake-line-body"></tbody></table></div><small class="field-error" data-error-for="items"></small>
 <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu phiếu</button></div></form>
 </section></div>
+<div class="modal-backdrop hidden" id="stocktake-detail-modal"><section class="modal modal-xl print-document" role="dialog" aria-modal="true" aria-labelledby="stocktake-detail-title">
+  <div class="modal-header no-print"><div><span class="eyebrow">CHI TIẾT KIỂM KÊ</span><h2 id="stocktake-detail-title">Phiếu kiểm kê</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+  <div id="stocktake-detail"></div>
+  <div class="modal-actions no-print"><button class="button secondary" id="stocktake-print" type="button">In phiếu</button><button class="button danger-button" id="stocktake-cancel" type="button">Hủy phiếu</button><button class="button secondary modal-close" type="button">Đóng</button><button class="button primary" id="stocktake-detail-confirm" type="button">Xác nhận kiểm kê</button></div>
+</section></div>
 {% endblock %}
