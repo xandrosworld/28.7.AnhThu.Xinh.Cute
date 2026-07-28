@@ -15,6 +15,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  static:
+    name: Static, links and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compile and parse source files
+        run: |
+          python -m compileall -q app tests scripts
+          node --check app/static/app.js
+          node --check e2e/wms.spec.js
+          node --check playwright.config.js
+
+      - name: Reject placeholders and high-confidence secrets
+        shell: bash
+        run: |
+          if git grep -nE 'href=["'"'"']#|action=["'"'"']#|TODO|FIXME' -- app; then
+            echo "Placeholder link or unfinished marker detected."
+            exit 1
+          fi
+          if git grep -nE 'gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|sk-[A-Za-z0-9]{24,}' -- .; then
+            echo "High-confidence secret pattern detected."
+            exit 1
+          fi
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "Tracked .env file detected."
+            exit 1
+          fi
+
   sqlite:
     name: SQLite / Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -53,24 +87,81 @@ jobs:
           --cov-report=xml
           --cov-fail-under=85
 
+      - name: Verify NFR-005 performance benchmark
+        if: matrix.python-version == '3.12'
+        run: >
+          python scripts/benchmark.py
+          --json-output performance-results-ci.json
+
       - name: Upload coverage evidence
         if: matrix.python-version == '3.12' && always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-sqlite-python-3.12
-          path: coverage.xml
+          name: quality-evidence-sqlite-python-3.12
+          path: |
+            coverage.xml
+            performance-results-ci.json
           if-no-files-found: warn
+
+  e2e:
+    name: Playwright / ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install application and E2E dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          npm ci
+
+      - name: Install ${{ matrix.browser }} browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run browser smoke suite at 1366, 1024 and 390 pixels
+        run: >
+          npm run test:e2e --
+          --project=${{ matrix.browser }}-1366
+          --project=${{ matrix.browser }}-1024
+          --project=${{ matrix.browser }}-390
+
+      - name: Upload Playwright failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}-failure
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
 
   sqlserver:
     name: SQL Server 2022 / ODBC 18
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      SA_PASSWORD: WmsTest_2026_Strong!
+      SA_PASSWORD: ${{ format('WmsTest_{0}_Aa9', github.run_id) }}
       DATABASE_URL: >-
-        mssql+pyodbc://sa:WmsTest_2026_Strong%21@127.0.0.1:1433/dnp_wms_migration?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+        mssql+pyodbc://sa:WmsTest_${{ github.run_id }}_Aa9@127.0.0.1:1433/dnp_wms_migration?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
       TEST_DATABASE_URL: >-
-        mssql+pyodbc://sa:WmsTest_2026_Strong%21@127.0.0.1:1433/dnp_wms_test?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+        mssql+pyodbc://sa:WmsTest_${{ github.run_id }}_Aa9@127.0.0.1:1433/dnp_wms_test?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
 
     services:
       sqlserver:
@@ -78,7 +169,7 @@ jobs:
         env:
           ACCEPT_EULA: Y
           MSSQL_PID: Developer
-          MSSQL_SA_PASSWORD: WmsTest_2026_Strong!
+          MSSQL_SA_PASSWORD: ${{ format('WmsTest_{0}_Aa9', github.run_id) }}
         ports:
           - 1433:1433
 

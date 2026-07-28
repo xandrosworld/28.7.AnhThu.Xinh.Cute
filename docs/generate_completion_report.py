@@ -2,9 +2,11 @@
 
 Usage after verification:
     python docs/generate_completion_report.py \
-        --test-result "68 passed, 1 SQL Server test skipped locally" \
-        --coverage "87.54%" \
-        --sqlserver passed
+        --test-result "78 passed, 1 SQL Server concurrency test skipped locally" \
+        --coverage "86.58%" \
+        --benchmark-max-ms "71.778" \
+        --sqlserver pending \
+        --browser chromium-local
 
 The result is always written under ``docs/``.  Test results are required so a
 stale or invented count cannot silently enter the submission report.
@@ -31,13 +33,6 @@ OUTPUT = (
     / "docs"
     / "49K21.1_NguyenHoangThanhTruc_Chuong3_KPI4_HoanThien.docx"
 )
-CI_RUN_URL = (
-    "https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/"
-    "actions/runs/30346223947"
-)
-CI_SHA = "c4a2ad80fd2a5b894f6969d2604359786add8f87"
-
-
 def add_table(document, headers, rows):
     table = document.add_table(rows=1, cols=len(headers))
     table.style = "Table Grid"
@@ -54,12 +49,17 @@ def parse_args():
     parser.add_argument(
         "--test-result",
         required=True,
-        help='Kết quả pytest thật, ví dụ "68 passed"',
+        help='Kết quả pytest thật, ví dụ "78 passed"',
     )
     parser.add_argument(
         "--coverage",
         default="Chưa ghi nhận",
-        help='Coverage thật, ví dụ "87.54%%"; không cung cấp nếu chưa đo',
+        help='Coverage thật, ví dụ "86.58%%"; không cung cấp nếu chưa đo',
+    )
+    parser.add_argument(
+        "--benchmark-max-ms",
+        required=True,
+        help='Max thật từ performance_results.json, ví dụ "71.778"',
     )
     parser.add_argument(
         "--sqlserver",
@@ -67,11 +67,31 @@ def parse_args():
         default="pending",
         help="Chỉ chọn passed sau khi job SQL Server thật đã xanh",
     )
+    parser.add_argument(
+        "--sqlserver-result",
+        default="",
+        help='Kết quả SQL Server thật, ví dụ "77 passed, 2 skipped"',
+    )
+    parser.add_argument(
+        "--browser",
+        choices=("pending", "chromium-local", "passed"),
+        default="chromium-local",
+        help="Chỉ chọn passed sau khi Chromium và Firefox CI đều xanh",
+    )
+    parser.add_argument("--ci-run-url", default="", help="URL run CI xanh của revision hiện tại")
+    parser.add_argument("--ci-sha", default="", help="Full SHA tương ứng với run CI")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    if (
+        args.sqlserver == "passed" or args.browser == "passed"
+    ) and not (args.ci_run_url and args.ci_sha):
+        raise ValueError(
+            "--ci-run-url và --ci-sha là bắt buộc khi đánh dấu SQL Server "
+            "hoặc browser đã đạt"
+        )
     if not SOURCE.exists():
         raise FileNotFoundError(f"Không tìm thấy tài liệu nguồn: {SOURCE}")
 
@@ -114,38 +134,51 @@ def main():
     for item in (
         "Một Flask modular monolith; API, service, model/repository và giao diện dùng chung.",
         "SQLAlchemy/Alembic; SQLite chạy ngay và SQL Server cấu hình qua DATABASE_URL.",
-        "RBAC ADMIN/CS/WAREHOUSE, mật khẩu băm, session, CSRF và audit.",
-        "Nhập kho có inspection; xuất kho kiểm email hợp đồng và picking FEFO/FIFO.",
-        "Lot/pallet, stock movement, kiểm kê snapshot, transaction và idempotency.",
-        "Dashboard, báo cáo, CSV, bản in và backup/restore SQLite.",
+        "RBAC ADMIN/CS/WAREHOUSE; ADMIN cấu hình vai trò và đơn vị tính tại /settings.",
+        "Nhập kho bắt buộc inspection trước confirm; accepted/rejected có lý do.",
+        "Xuất kho kiểm email hợp đồng, start-picking/reject và picking FEFO/FIFO.",
+        "Decimal end-to-end, lot/pallet, stock movement, snapshot, transaction và idempotency.",
+        "Dashboard 6 KPI, báo cáo, CSV, bản in và backup/restore SQLite.",
     ):
         document.add_paragraph(item, style="List Bullet")
 
     document.add_heading("3. Kết quả kiểm thử đã xác nhận", level=2)
     sql_result = (
-        "Đạt trên SQL Server 2022 + ODBC 18: 67 passed, 2 test backup/restore "
-        "SQLite skipped; test concurrency đã chạy và đạt"
+        "Đạt trên SQL Server 2022 + ODBC 18: "
+        f"{args.sqlserver_result or 'đã chạy đầy đủ'}; {args.ci_run_url}, SHA {args.ci_sha}"
         if args.sqlserver == "passed"
-        else "Chờ kết quả job SQL Server 2022; chưa tuyên bố đạt"
+        else "Revision hiện tại chờ kết quả SQL Server 2022; chưa tuyên bố đạt"
     )
+    browser_result = {
+        "pending": "18 Playwright cases đã khai báo; chưa có browser result được xác minh",
+        "chromium-local": (
+            "18 Playwright project-cases; Chromium local 9/9 tại "
+            "1366/1024/390 px; Firefox và CI pending"
+        ),
+        "passed": (
+            f"Chromium và Firefox CI đạt tại 1366/1024/390 px; "
+            f"{args.ci_run_url}, SHA {args.ci_sha}"
+        ),
+    }[args.browser]
     ci_result = (
-        f"Run 30346223947 thành công tại SHA {CI_SHA}"
-        if args.sqlserver == "passed"
-        else "Chưa ghi nhận bằng chứng CI SQL Server đạt"
+        f"{args.ci_run_url} tại SHA {args.ci_sha}"
+        if args.ci_run_url and args.ci_sha
+        else "Revision hiện tại chưa có run CI xanh được ghi nhận"
     )
     sql_traceability = (
         "AT-18 và NFR lưu trữ/toàn vẹn trên SQL Server đã đạt tại "
-        f"{CI_RUN_URL}, SHA {CI_SHA}: 67 passed, 2 SQLite-only skipped; "
-        "test concurrency đã chạy và đạt. "
+        f"{args.ci_run_url}, SHA {args.ci_sha}: "
+        f"{args.sqlserver_result or 'test SQL Server đã đạt'}. "
         if args.sqlserver == "passed"
         else "AT-18 chưa được đánh dấu đạt do chưa có bằng chứng CI SQL Server. "
     )
     if args.sqlserver == "passed":
         document.add_paragraph(
             "Bằng chứng CI chính thức: "
-            f"{CI_RUN_URL} tại SHA {CI_SHA}. Các job SQLite/Python 3.10, "
-            "SQLite/Python 3.12 và SQL Server 2022 đều thành công."
+            f"{args.ci_run_url} tại SHA {args.ci_sha}. "
+            "Chỉ ghi các job đạt theo kết quả của chính run này."
         )
+    benchmark_display = args.benchmark_max_ms.replace(".", ",")
     add_table(
         document,
         ("Hạng mục", "Kết quả"),
@@ -154,7 +187,7 @@ def main():
             ("Coverage package app", args.coverage),
             (
                 "NFR-005 hiệu năng",
-                "Đạt; request chậm nhất 55,413 ms khi xuất CSV 5.000 movement",
+                f"Đạt; request chậm nhất {benchmark_display} ms khi xuất CSV 5.000 movement",
             ),
             ("SQLite", "Migrate, seed và test trong quy trình xác minh"),
             ("SQL Server", sql_result),
@@ -163,8 +196,8 @@ def main():
                 ci_result,
             ),
             (
-                "Trình duyệt",
-                "Checklist thủ công Chrome/Edge/Firefox; không cộng vào pytest",
+                "Playwright",
+                browser_result,
             ),
         ),
     )
@@ -174,11 +207,10 @@ def main():
         "BR-001 đến BR-015 và NFR-001 đến NFR-010 được truy vết tại "
         "docs/REQUIREMENTS_TRACEABILITY.md tới API/màn hình và acceptance test. "
         "NFR-005 đã đạt benchmark độc lập với 1.012 sản phẩm, 5.010 lot và "
-        "5.000 stock movement; request chậm nhất 55,413 ms, thấp hơn ngưỡng "
+        f"5.000 stock movement; request chậm nhất {benchmark_display} ms, thấp hơn ngưỡng "
         "5 giây. "
         f"{sql_traceability}"
-        "Trình duyệt vẫn được nghiệm thu "
-        "theo checklist thủ công."
+        f"Browser: {browser_result}. Camera/USB/in vật lý vẫn theo checklist thủ công."
     )
 
     document.add_heading("5. Nghiệm thu nhanh", level=2)

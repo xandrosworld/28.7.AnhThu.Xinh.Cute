@@ -37,10 +37,16 @@ class ActiveMixin:
 
 class Role(db.Model):
     __tablename__ = "roles"
+    __table_args__ = (
+        CheckConstraint("status IN ('active','inactive')", name="valid_status"),
+    )
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.Unicode(32), nullable=False, unique=True)
     name = db.Column(db.Unicode(100), nullable=False)
     description = db.Column(db.Unicode(255), nullable=False, default="")
+    status = db.Column(
+        db.Unicode(16), nullable=False, default="active", server_default="active"
+    )
 
 
 class User(TimestampMixin, db.Model):
@@ -59,7 +65,7 @@ class User(TimestampMixin, db.Model):
     email = db.Column(db.Unicode(255), nullable=False, unique=True)
     phone = db.Column(db.Unicode(30), nullable=False, default="", server_default="")
     role = db.Column(db.Unicode(16), nullable=False)
-    role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=True, index=True)
+    role_id = db.Column(db.Integer, db.ForeignKey("roles.id"), nullable=False, index=True)
     status = db.Column(db.Unicode(16), nullable=False, default="active")
     avatar_initials = db.Column(db.Unicode(8), nullable=False, default="", server_default="")
 
@@ -156,7 +162,7 @@ class Product(TimestampMixin, ActiveMixin, db.Model):
         db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True
     )
     unit = db.Column(db.Unicode(40), nullable=False)
-    unit_id = db.Column(db.Integer, db.ForeignKey("units.id"), nullable=True, index=True)
+    unit_id = db.Column(db.Integer, db.ForeignKey("units.id"), nullable=False, index=True)
     quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
     min_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
     location = db.Column(db.Unicode(100), nullable=False, default="", server_default="")

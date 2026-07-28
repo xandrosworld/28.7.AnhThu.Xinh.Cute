@@ -227,6 +227,8 @@ def seed_database(database):
             ("ADMIN", "Quản trị viên", "Quản trị tài khoản và dữ liệu nền"),
             ("CS", "Chăm sóc khách hàng", "Lập và theo dõi phiếu nhập/xuất"),
             ("WAREHOUSE", "Nhân viên kho", "Kiểm nhận, xuất hàng và kiểm kê"),
+            ("MANAGER", "Quản lý kho", "Vai trò tương thích cho dữ liệu cũ"),
+            ("STAFF", "Nhân viên", "Vai trò tương thích cho dữ liệu cũ"),
         ],
     )
     database.executemany(
@@ -305,13 +307,18 @@ def seed_database(database):
             "QB",
         ),
     ]
+    role_ids = {
+        row["code"].lower(): row["id"]
+        for row in database.execute("SELECT id, code FROM roles")
+    }
     database.executemany(
         """
         INSERT INTO users
-            (username, password_hash, full_name, email, phone, role, status, avatar_initials)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (username, password_hash, full_name, email, phone, role, role_id,
+             status, avatar_initials)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        users,
+        [(*user[:6], role_ids[user[5]], *user[6:]) for user in users],
     )
 
     categories = [
@@ -358,14 +365,22 @@ def seed_database(database):
         ("SKU-1011", "Ống thép D50", "NVL", "DN", "Cây", 310, 60, "A-04-01"),
         ("SKU-1012", "Sơn nội thất trắng", "VTXD", "BD", "Thùng", 0, 15, "B-04-02"),
     ]
+    unit_ids = {
+        row["name"].casefold(): row["id"]
+        for row in database.execute("SELECT id, name FROM units")
+    }
     database.executemany(
         """
         INSERT INTO inventory
-            (sku, name, category_id, warehouse_id, unit, quantity, min_quantity, location)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (sku, name, category_id, warehouse_id, unit, unit_id, quantity,
+             min_quantity, location)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
-            (sku, name, category_ids[category], warehouse_ids[warehouse], unit, qty, minimum, location)
+            (
+                sku, name, category_ids[category], warehouse_ids[warehouse],
+                unit, unit_ids[unit.casefold()], qty, minimum, location,
+            )
             for sku, name, category, warehouse, unit, qty, minimum, location in inventory
         ],
     )
@@ -406,6 +421,14 @@ def seed_database(database):
         INSERT INTO receipt_items
           (receipt_id, inventory_id, quantity, accepted_quantity, pallet_id, barcode)
         VALUES (1, 1, 120, 120, 'PLT-HN-0001', '8938501000012')
+        """
+    )
+    database.execute(
+        """
+        INSERT INTO inbound_inspections
+          (receipt_item_id, accepted_quantity, rejected_quantity, issue_note,
+           inspected_by)
+        VALUES (1, 120, 0, '', 1)
         """
     )
     # Normalized contract-email records are authoritative for outbound checks.

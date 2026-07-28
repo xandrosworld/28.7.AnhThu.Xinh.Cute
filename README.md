@@ -11,17 +11,17 @@ Repository bàn giao chính thức:
 
 - Đăng nhập, session, mật khẩu băm, CSRF, audit và phân quyền phía server cho
   `ADMIN`, `CS`, `WAREHOUSE`.
-- Quản lý tài khoản, vai trò, đơn vị, danh mục, hàng hóa, khách hàng, email hợp
-  đồng, nhà cung cấp và kho; master đã phát sinh được ngừng hoạt động thay vì
-  xóa mất lịch sử.
+- Quản lý tài khoản, vai trò, đơn vị tính, danh mục, hàng hóa, khách hàng,
+  email hợp đồng, nhà cung cấp và kho; trang `/settings` dành cho ADMIN cho
+  phép cấu hình vai trò/đơn vị và ngừng master đã phát sinh thay vì xóa lịch sử.
 - Phiếu nhập nhiều dòng, container/seal, pallet/barcode/hạn dùng, kiểm nhận
-  accepted/rejected và xác nhận nguyên tử.
+  accepted/rejected bắt buộc trước xác nhận và cập nhật tồn nguyên tử.
 - Phiếu xuất kiểm email hợp đồng, kiểm tồn lại khi xác nhận, picking FEFO/FIFO,
-  bỏ lô hết hạn và không cho tồn âm.
+  trạng thái bắt đầu lấy hàng/từ chối/hủy, bỏ lô hết hạn và không cho tồn âm.
 - Tồn theo sản phẩm và lot/pallet, stock movement, kiểm kê snapshot, chống xác
-  nhận lặp và rollback toàn bộ khi một dòng lỗi.
-- Dashboard, bộ lọc, báo cáo, CSV UTF-8, trang in phiếu/picking list và
-  backup/restore SQLite.
+  nhận lặp, hỗ trợ số lượng thập phân và rollback toàn bộ khi một dòng lỗi.
+- Dashboard có KPI nhập/xuất/tồn, cảnh báo và hoạt động gần đây; báo cáo có bộ
+  lọc, CSV UTF-8, trang in phiếu/picking list và backup/restore SQLite.
 - Giao diện tiếng Việt responsive, hỗ trợ bàn phím, loading/empty/error state,
   máy quét USB và `BarcodeDetector` khi trình duyệt có hỗ trợ.
 
@@ -135,12 +135,14 @@ Không commit mật khẩu hoặc chuỗi kết nối thật. Xem thêm
 2022 riêng: job này tạo database thật, chạy migration/seed rồi chạy test qua
 ODBC 18; không giả lập bằng SQLite.
 
-Bằng chứng CI chính thức: [run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
+Bằng chứng CI của baseline trước đợt mở rộng hiện tại:
+[run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
 trên commit `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**. Hai job
 SQLite/Python 3.10 và 3.12 đều xanh; job SQL Server 2022 + ODBC 18 đạt
 **67 passed, 2 skipped**. Hai test bị skip chỉ là backup/restore SQLite trong
 `tests/test_cli.py`; test cạnh tranh xác nhận xuất đã thực sự chạy và đạt trên
-SQL Server.
+SQL Server. Revision hiện tại có thêm migration/ràng buộc nên phải chờ workflow
+CI mới trước khi kế thừa kết luận SQL Server cho bản nộp cuối.
 
 ## Migration
 
@@ -167,8 +169,11 @@ flask --app run.py restore-db backups\dnp-wms-20260728.sqlite --yes
 - Restore kiểm tra `PRAGMA integrity_check` trước và yêu cầu `--yes`.
 - Không commit thư mục backup vào Git.
 
-Với SQL Server, dùng `BACKUP DATABASE`/`RESTORE DATABASE` và chính sách
-transaction log của SQL Server; CLI SQLite cố ý từ chối database khác.
+Với SQL Server, dùng `BACKUP DATABASE`/`RESTORE DATABASE`, `CHECKSUM`,
+`RESTORE VERIFYONLY` và phục hồi thử sang database riêng. Câu lệnh mẫu cùng
+quy trình kiểm tra `DBCC CHECKDB` nằm tại
+[`docs/SQL_SERVER.md`](docs/SQL_SERVER.md#backup-và-kiểm-tra-phục-hồi). CLI
+SQLite cố ý từ chối database khác.
 
 ## Kiểm thử
 
@@ -185,39 +190,73 @@ python -m pytest --cov=app --cov-report=term-missing -q
 ```
 
 Kết quả xác minh cục bộ cuối trên Python 3.12/SQLite:
-**68 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
-toàn package `app` đạt 87,54%**. CI đặt ngưỡng 85% cho toàn package. Không tính
-checklist trình duyệt thủ công vào số test tự động.
+**78 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
+toàn package `app` đạt 86,58%**. Ngưỡng coverage là 85%; Playwright được tính
+riêng, không cộng vào số test pytest.
 
-Kết quả SQL Server CI tại
+Kết quả SQL Server CI của baseline tại
 [run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947),
 SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87`: **67 passed, 2 skipped**;
 hai skip chỉ dành cho CLI backup/restore SQLite, còn test concurrency đã chạy
-và đạt.
+và đạt. SQL Server CI cho revision hiện tại đang chờ chạy lại.
 
 Bộ test bao phủ:
 
 - auth, tài khoản khóa, RBAC, CSRF và API error envelope;
-- CRUD/update/deactivate master, duplicate và dữ liệu đã tham chiếu;
-- draft/edit/inspect/confirm/cancel phiếu nhập;
-- email hợp đồng, FEFO/FIFO, lô hết hạn, rollback và invariant tồn;
-- stale/idempotent stocktake, dữ liệu số/ngày/JSON sai kiểu;
+- CRUD/update/deactivate master, cấu hình vai trò/đơn vị, duplicate và dữ liệu
+  đã tham chiếu;
+- draft/edit/inspection bắt buộc/confirm/cancel phiếu nhập;
+- email hợp đồng, FEFO/FIFO, start-picking/reject/cancel, lô hết hạn, rollback
+  và invariant tồn;
+- stale/idempotent stocktake, số lượng thập phân, dữ liệu số/ngày/JSON sai kiểu;
 - migration/seed, backup/restore và HTTP/DOM/static asset;
 - cạnh tranh xác nhận xuất trên job SQL Server thật.
 
-Workflow `.github/workflows/ci.yml` chạy SQLite trên Python 3.10/3.12 và một
-job SQL Server 2022 + ODBC 18. Test đồng thời chỉ được chuyển từ skip sang chạy
-trong job SQL Server thật. Dự án không có job deploy.
+Workflow `.github/workflows/ci.yml` cấu hình static/secret scan, benchmark,
+SQLite trên Python 3.10/3.12, Playwright Chromium/Firefox tại 1366/1024/390 px
+và SQL Server 2022 + ODBC 18. Chưa tuyên bố các job mới đạt cho tới khi có URL
+run và SHA xanh. Dự án không có job deploy.
+
+### Playwright E2E
+
+Node.js chỉ cần cho kiểm thử trình duyệt, không cần để chạy Flask:
+
+```powershell
+npm ci
+npx playwright install chromium firefox
+npm run test:e2e:list
+npm run test:e2e
+```
+
+Chạy riêng từng browser hoặc viewport:
+
+```powershell
+npm run test:e2e -- --project=chromium-1366 --project=chromium-1024 --project=chromium-390
+npm run test:e2e -- --project=firefox-1366 --project=firefox-1024 --project=firefox-390
+```
+
+Nếu đã có Google Chrome trên Windows, có thể dùng binary hệ thống mà không tải
+Chromium của Playwright:
+
+```powershell
+$env:PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='C:\Program Files\Google\Chrome\Application\chrome.exe'
+npm run test:e2e -- --project=chromium-1366 --project=chromium-1024 --project=chromium-390
+```
+
+Suite hiện khai báo **18 project-cases**: 3 kịch bản × 2 browser × 3 viewport.
+Xác minh cục bộ bằng system Chrome đạt **9/9** trên Chromium tại
+1366/1024/390 px. Firefox và workflow Playwright CI của revision hiện tại đang
+chờ bằng chứng; không ghi “đạt” trước khi có run xanh.
 
 ## API chính
 
 | Nhóm | Endpoint |
 |---|---|
-| Auth | `POST /api/auth/login`, `POST /logout`, `GET /me` |
-| Lookup | `GET /api/roles`, `/units`, `/operations/lookups` |
+| Auth | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
+| Cấu hình | `GET/POST /api/roles`, `PUT /api/roles/:id`; `GET/POST /api/units`, `PUT /api/units/:id` |
 | Master | `/api/users`, `/categories`, `/products`, `/customers`, `/suppliers`, `/warehouses` |
 | Nhập | `/api/inbound-receipts`, `/:id/inspect`, `/:id/confirm`, `/:id/cancel` |
-| Xuất | `/api/outbound-receipts`, `/:id/check-stock`, `/:id/picking-list`, `/:id/confirm`, `/:id/cancel` |
+| Xuất | `/api/outbound-receipts`, `/:id/check-stock`, `/:id/picking-list`, `/:id/start-picking`, `/:id/reject`, `/:id/confirm`, `/:id/cancel` |
 | Tồn | `/api/inventory`, `/api/stock-movements`, `/api/stocktakes`, `/api/stocktakes/:id` |
 | Báo cáo | `/api/reports/summary`, `/api/reports/export.csv` |
 
@@ -234,10 +273,9 @@ Các lệnh ghi cần session đúng vai trò và header `X-CSRF-Token`.
 - Bản báo cáo hoàn thiện:
   `docs/49K21.1_NguyenHoangThanhTruc_Chuong3_KPI4_HoanThien.docx`
 
-Playwright không được đưa vào dependency bắt buộc để tránh tải browser và gây
-flaky khi chấm offline. HTTP/DOM/static contract được test tự động; Chrome,
-Edge, Firefox, camera barcode và các kích thước 390/1024/1366 px nằm trong
-checklist nghiệm thu thủ công và phải có biên bản trước khi nộp.
+Playwright được quản lý riêng trong `package.json`; Flask vẫn chạy offline mà
+không cần Node/browser. Kết quả browser, screenshot/trace khi lỗi và URL CI
+phải được lưu làm bằng chứng nghiệm thu, tách khỏi thống kê pytest.
 
 ## Lịch sử ba thành viên
 

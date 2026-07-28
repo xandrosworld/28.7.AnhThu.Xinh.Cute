@@ -7,6 +7,7 @@ from sqlalchemy import case, func, or_, select
 
 from .extensions import db
 from .models import (
+    InboundInspection,
     InventoryLot,
     InventoryAdjustment,
     OutboundAllocation,
@@ -140,6 +141,20 @@ def confirm_receipt(receipt_id, expected_type, actor_id):
     )
     if not items:
         raise DomainError("Phiếu không có dòng hàng.")
+    if expected_type == "inbound":
+        inspected_line_ids = set(
+            db.session.scalars(
+                select(InboundInspection.receipt_item_id).where(
+                    InboundInspection.receipt_item_id.in_(
+                        [item.id for item in items]
+                    )
+                )
+            )
+        )
+        if inspected_line_ids != {item.id for item in items}:
+            raise DomainError(
+                "Phiếu nhập phải được kiểm nhận đầy đủ trước khi xác nhận."
+            )
 
     # Lock and pre-validate every product before any mutation. This prevents a
     # later-line shortage from partially changing stock.

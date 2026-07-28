@@ -9,6 +9,10 @@ instance/
 .coverage.*
 coverage.xml
 htmlcov/
+node_modules/
+test-results/
+playwright-report/
+blob-report/
 *.sqlite
 *.sqlite3
 *.db

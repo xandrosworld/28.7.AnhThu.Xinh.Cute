@@ -4,7 +4,7 @@
 
 Benchmark độc lập ngày 28/07/2026 **đạt NFR-005** trong môi trường đo: tất cả
 request được đo đều dưới 5 giây. Request chậm nhất là xuất CSV 5.000 movement,
-với thời gian lớn nhất **55,413 ms**.
+với thời gian lớn nhất **71,778 ms**.
 
 Đây là benchmark phía server bằng Flask test client. Phép đo bao gồm routing,
 xác thực session, truy vấn SQLite, xử lý nghiệp vụ, serialization và tạo toàn
@@ -14,7 +14,7 @@ bộ response; không bao gồm độ trễ mạng hoặc thời gian render c�
 
 | Thuộc tính | Giá trị đã đo |
 |---|---|
-| Thời điểm UTC | `2026-07-28T08:46:45.894631+00:00` |
+| Thời điểm UTC | `2026-07-28T09:57:43.350288+00:00` |
 | Hệ điều hành | Windows 11 `10.0.22621` |
 | CPU | Intel64 Family 6 Model 154; 12 logical CPUs |
 | Python | CPython 3.12.10 |
@@ -25,8 +25,8 @@ bộ response; không bao gồm độ trễ mạng hoặc thời gian render c�
 | Sản phẩm | 1.012, trong đó 1.000 bản ghi benchmark |
 | Lot/pallet | 5.010 |
 | Stock movement | 5.000 |
-| Kích thước database | 2.756.608 byte, khoảng 2,63 MiB |
-| Thời gian sinh dữ liệu | 0,073549 giây |
+| Kích thước database | 2.772.992 byte, khoảng 2,64 MiB |
+| Thời gian sinh dữ liệu | 0,106386 giây |
 | Cách lấy mẫu | 2 warmup + 7 lượt đo cho mỗi endpoint |
 | Tiêu chí đạt | Mọi lượt đo `< 5,000 giây` |
 
@@ -37,13 +37,13 @@ ghi hoặc reset database demo của người dùng.
 
 | Tác vụ | Median | P95 | Lớn nhất | Response | Kết quả |
 |---|---:|---:|---:|---:|---|
-| Dashboard | 1,909 ms | 2,189 ms | 2,189 ms | 1.304 byte | Đạt |
-| Trang tồn kho 50 dòng | 4,181 ms | 4,334 ms | 4,334 ms | 51.075 byte | Đạt |
-| Tìm tồn theo SKU | 5,337 ms | 5,797 ms | 5,797 ms | 1.221 byte | Đạt |
-| Tìm master hàng hóa | 1,730 ms | 1,794 ms | 1,794 ms | 1.093 byte | Đạt |
-| Tổng hợp báo cáo | 4,621 ms | 4,960 ms | 4,960 ms | 25.456 byte | Đạt |
-| Báo cáo lọc kho/hàng/khách | 3,524 ms | 4,102 ms | 4,102 ms | 364 byte | Đạt |
-| Xuất CSV 5.000 movement | 34,248 ms | 55,413 ms | 55,413 ms | 470.073 byte | Đạt |
+| Dashboard | 3,772 ms | 6,772 ms | 6,772 ms | 1.438 byte | Đạt |
+| Trang tồn kho 50 dòng | 6,381 ms | 7,526 ms | 7,526 ms | 51.075 byte | Đạt |
+| Tìm tồn theo SKU | 8,769 ms | 9,270 ms | 9,270 ms | 1.221 byte | Đạt |
+| Tìm master hàng hóa | 2,803 ms | 3,035 ms | 3,035 ms | 1.087 byte | Đạt |
+| Tổng hợp báo cáo | 7,241 ms | 8,245 ms | 8,245 ms | 25.456 byte | Đạt |
+| Báo cáo lọc kho/hàng/khách | 5,034 ms | 5,790 ms | 5,790 ms | 364 byte | Đạt |
+| Xuất CSV 5.000 movement | 48,695 ms | 71,778 ms | 71,778 ms | 470.073 byte | Đạt |
 
 Kết quả máy đọc đầy đủ, gồm bảy mẫu của từng endpoint, nằm tại
 [`performance_results.json`](performance_results.json).

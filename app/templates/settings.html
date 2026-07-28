@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Cấu hình hệ thống · DNP WMS{% endblock %}
+{% block topbar_title %}Cấu hình hệ thống{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">QUẢN TRỊ HỆ THỐNG</span>
+    <h1>Vai trò và đơn vị tính</h1>
+    <p>Quản lý dữ liệu cấu hình dùng chung. Bản ghi đã phát sinh nghiệp vụ được ngừng hoạt động thay vì xóa.</p>
+  </div>
+</div>
+
+<div class="settings-grid">
+  <section class="panel settings-panel" aria-labelledby="roles-heading">
+    <div class="panel-header settings-panel-header">
+      <div>
+        <span class="eyebrow">PHÂN QUYỀN</span>
+        <h2 id="roles-heading">Vai trò</h2>
+        <p>Mã vai trò được dùng để kiểm soát quyền phía server.</p>
+      </div>
+      <button class="button primary" id="role-add" type="button">Thêm vai trò</button>
+    </div>
+    <div class="settings-summary" id="role-summary" role="status" aria-live="polite"></div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Danh sách vai trò hệ thống</caption>
+        <thead><tr><th>Mã</th><th>Tên vai trò</th><th>Mô tả</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+        <tbody id="role-body" aria-live="polite">
+          <tr><td colspan="5"><div class="empty-state">Đang tải vai trò…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel settings-panel" aria-labelledby="units-heading">
+    <div class="panel-header settings-panel-header">
+      <div>
+        <span class="eyebrow">QUY CÁCH HÀNG HÓA</span>
+        <h2 id="units-heading">Đơn vị tính</h2>
+        <p>Cấu hình quy cách và quyền cho phép tách kiện khi xử lý kho.</p>
+      </div>
+      <button class="button primary" id="unit-add" type="button">Thêm đơn vị</button>
+    </div>
+    <div class="settings-summary" id="unit-summary" role="status" aria-live="polite"></div>
+    <div class="table-wrap">
+      <table>
+        <caption class="sr-only">Danh sách đơn vị tính</caption>
+        <thead><tr><th>Mã</th><th>Tên đơn vị</th><th>Tách kiện</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+        <tbody id="unit-body" aria-live="polite">
+          <tr><td colspan="5"><div class="empty-state">Đang tải đơn vị tính…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block modals %}
+<div class="modal-backdrop hidden" id="role-modal">
+  <section class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="role-modal-title">
+    <div class="modal-header">
+      <div><span class="eyebrow">VAI TRÒ</span><h2 id="role-modal-title">Thêm vai trò</h2></div>
+      <button class="icon-button modal-close" type="button" aria-label="Đóng">×</button>
+    </div>
+    <form id="role-form" novalidate>
+      <input type="hidden" name="id">
+      <div class="form-alert hidden" role="alert"></div>
+      <div class="form-grid">
+        <div class="form-group"><label for="role-code">Mã vai trò *</label><input id="role-code" name="code" required maxlength="32" pattern="[A-Za-z0-9_-]{2,32}" autocomplete="off"><small class="form-hint">2–32 ký tự: chữ, số, gạch ngang hoặc gạch dưới.</small><small class="field-error" data-error-for="code"></small></div>
+        <div class="form-group"><label for="role-name">Tên vai trò *</label><input id="role-name" name="name" required maxlength="100"><small class="field-error" data-error-for="name"></small></div>
+        <div class="form-group span-full"><label for="role-description">Mô tả</label><textarea id="role-description" name="description" rows="3" maxlength="255"></textarea><small class="field-error" data-error-for="description"></small></div>
+        <div class="form-group"><label for="role-status">Trạng thái</label><select id="role-status" name="status"><option value="active">Hoạt động</option><option value="inactive">Ngừng hoạt động</option></select><small class="field-error" data-error-for="status"></small></div>
+      </div>
+      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu vai trò</button></div>
+    </form>
+  </section>
+</div>
+
+<div class="modal-backdrop hidden" id="unit-modal">
+  <section class="modal modal-large" role="dialog" aria-modal="true" aria-labelledby="unit-modal-title">
+    <div class="modal-header">
+      <div><span class="eyebrow">ĐƠN VỊ TÍNH</span><h2 id="unit-modal-title">Thêm đơn vị tính</h2></div>
+      <button class="icon-button modal-close" type="button" aria-label="Đóng">×</button>
+    </div>
+    <form id="unit-form" novalidate>
+      <input type="hidden" name="id">
+      <div class="form-alert hidden" role="alert"></div>
+      <div class="form-grid">
+        <div class="form-group"><label for="unit-code">Mã đơn vị *</label><input id="unit-code" name="code" required maxlength="20" pattern="[A-Za-z0-9_-]{2,20}" autocomplete="off"><small class="field-error" data-error-for="code"></small></div>
+        <div class="form-group"><label for="unit-name">Tên đơn vị *</label><input id="unit-name" name="name" required maxlength="80"><small class="field-error" data-error-for="name"></small></div>
+        <div class="form-group"><label for="unit-status">Trạng thái</label><select id="unit-status" name="status"><option value="active">Hoạt động</option><option value="inactive">Ngừng hoạt động</option></select><small class="field-error" data-error-for="status"></small></div>
+        <div class="form-group checkbox-setting"><input id="unit-break-pack" name="allow_break_pack" type="checkbox" value="true"><label for="unit-break-pack"><strong>Cho phép tách kiện</strong><span>Có thể xuất số lượng nhỏ hơn quy cách đóng gói.</span></label><small class="field-error" data-error-for="allow_break_pack"></small></div>
+      </div>
+      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu đơn vị</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

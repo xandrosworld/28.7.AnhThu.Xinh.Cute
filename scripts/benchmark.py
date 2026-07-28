@@ -88,12 +88,15 @@ def seed_large_dataset(database_path: Path, products: int, lots: int, movements:
     connection = sqlite3.connect(database_path)
     connection.execute("PRAGMA foreign_keys = ON")
     try:
+        unit_id = connection.execute(
+            "SELECT id FROM units WHERE code='THUNG'"
+        ).fetchone()[0]
         connection.executemany(
             """
             INSERT INTO inventory
-                (sku, barcode, name, category_id, warehouse_id, unit, quantity,
+                (sku, barcode, name, category_id, warehouse_id, unit, unit_id, quantity,
                  min_quantity, location, description, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 0, 10, ?, ?, 'active', ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 0, 10, ?, ?, 'active', ?, ?)
             """,
             [
                 (
@@ -103,6 +106,7 @@ def seed_large_dataset(database_path: Path, products: int, lots: int, movements:
                     (index % 6) + 1,
                     (index % 4) + 1,
                     "Thùng",
+                    unit_id,
                     f"PERF-{index % 100:02d}",
                     "Dữ liệu tổng hợp chỉ dùng cho benchmark NFR-005",
                     timestamp,

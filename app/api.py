@@ -70,12 +70,12 @@ def to_int(value, default=None):
         return default
 
 
-def to_quantity(value):
+def to_quantity(value, *, allow_zero=False):
     try:
         result = Decimal(str(value)).quantize(Decimal("0.001"))
     except (InvalidOperation, TypeError, ValueError):
         return None
-    if not result.is_finite() or result <= 0:
+    if not result.is_finite() or result < 0 or (result == 0 and not allow_zero):
         return None
     return int(result) if result == result.to_integral_value() else float(result)
 
@@ -162,6 +162,25 @@ def dashboard():
         FROM inventory
         """
     ).fetchone()
+    today = date.today().isoformat()
+    receipt_summary = database.execute(
+        """
+        SELECT
+          COALESCE(SUM(CASE
+            WHEN receipt_type='inbound' AND status='completed'
+             AND confirmed_at >= ? THEN 1 ELSE 0 END), 0) AS inbound_today,
+          COALESCE(SUM(CASE
+            WHEN receipt_type='outbound' AND status='completed'
+             AND confirmed_at >= ? THEN 1 ELSE 0 END), 0) AS outbound_today,
+          COALESCE(SUM(CASE
+            WHEN status IN ('pending','picking') THEN 1 ELSE 0 END), 0)
+            AS awaiting_processing
+        FROM receipts
+        """,
+        (today, today),
+    ).fetchone()
+    summary_payload = dict(summary)
+    summary_payload.update(dict(receipt_summary))
     recent = database.execute(
         """
         SELECT a.id, a.old_quantity, a.new_quantity, a.difference, a.reason,
@@ -184,7 +203,7 @@ def dashboard():
     ).fetchall()
     return jsonify(
         ok=True,
-        summary=dict(summary),
+        summary=summary_payload,
         recent_adjustments=[dict(row) for row in recent],
         category_distribution=[dict(row) for row in categories],
     )
@@ -212,7 +231,9 @@ def lookups():
 def role_list():
     return jsonify(
         ok=True,
-        items=_list_rows("SELECT id,code,name,description FROM roles ORDER BY id"),
+        items=_list_rows(
+            "SELECT id,code,name,description,status FROM roles ORDER BY id"
+        ),
     )
 
 
@@ -225,6 +246,160 @@ def unit_list():
             "SELECT id,code,name,allow_break_pack,status FROM units ORDER BY name"
         ),
     )
+
+
+def _master_status(value):
+    return value if value in {"active", "inactive"} else None
+
+
+@bp.post("/roles")
+@roles_required("admin")
+@csrf_required
+def role_create():
+    data = json_object()
+    code = text(data.get("code")).upper()
+    name = text(data.get("name"))
+    description = text(data.get("description"))
+    status = _master_status(text(data.get("status")) or "active")
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã vai trò không hợp lệ."
+    if len(name) < 2:
+        errors["name"] = "Tên vai trò phải có ít nhất 2 ký tự."
+    if status is None:
+        errors["status"] = "Trạng thái không hợp lệ."
+    if errors:
+        return error("Dữ liệu vai trò chưa hợp lệ.", 422, errors)
+    database = get_db()
+    try:
+        cursor = database.execute(
+            """INSERT INTO roles (code,name,description,status)
+               VALUES (?,?,?,?)""",
+            (code, name, description, status),
+        )
+        audit("CREATE", "role", cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã vai trò đã tồn tại.", 409)
+    return jsonify(ok=True, id=cursor.lastrowid, message="Đã thêm vai trò."), 201
+
+
+@bp.put("/roles/<int:role_id>")
+@roles_required("admin")
+@csrf_required
+def role_update(role_id):
+    data = json_object()
+    database = get_db()
+    current = database.execute("SELECT * FROM roles WHERE id=?", (role_id,)).fetchone()
+    if current is None:
+        return error("Không tìm thấy vai trò.", 404)
+    code = text(data.get("code", current["code"])).upper()
+    name = text(data.get("name", current["name"]))
+    description = text(data.get("description", current["description"]))
+    status = _master_status(text(data.get("status", current["status"])))
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã vai trò không hợp lệ."
+    if len(name) < 2:
+        errors["name"] = "Tên vai trò phải có ít nhất 2 ký tự."
+    if status is None:
+        errors["status"] = "Trạng thái không hợp lệ."
+    active_users = database.execute(
+        "SELECT COUNT(*) FROM users WHERE role_id=? AND status='active'", (role_id,)
+    ).fetchone()[0]
+    if status == "inactive" and active_users:
+        errors["status"] = "Không thể ngừng vai trò đang có tài khoản hoạt động."
+    if errors:
+        return error("Dữ liệu vai trò chưa hợp lệ.", 422, errors)
+    try:
+        database.execute(
+            "UPDATE roles SET code=?,name=?,description=?,status=? WHERE id=?",
+            (code, name, description, status, role_id),
+        )
+        audit("UPDATE", "role", role_id, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã vai trò đã tồn tại.", 409)
+    return jsonify(ok=True, id=role_id, message="Đã cập nhật vai trò.")
+
+
+@bp.post("/units")
+@roles_required("admin")
+@csrf_required
+def unit_create():
+    data = json_object()
+    code = text(data.get("code")).upper()
+    name = text(data.get("name"))
+    status = _master_status(text(data.get("status")) or "active")
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã đơn vị không hợp lệ."
+    if len(name) < 1:
+        errors["name"] = "Tên đơn vị là bắt buộc."
+    if status is None:
+        errors["status"] = "Trạng thái không hợp lệ."
+    if errors:
+        return error("Dữ liệu đơn vị chưa hợp lệ.", 422, errors)
+    database = get_db()
+    try:
+        cursor = database.execute(
+            """INSERT INTO units (code,name,allow_break_pack,status)
+               VALUES (?,?,?,?)""",
+            (code, name, bool(data.get("allow_break_pack")), status),
+        )
+        audit("CREATE", "unit", cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã đơn vị đã tồn tại.", 409)
+    return jsonify(ok=True, id=cursor.lastrowid, message="Đã thêm đơn vị."), 201
+
+
+@bp.put("/units/<int:unit_id>")
+@roles_required("admin")
+@csrf_required
+def unit_update(unit_id):
+    data = json_object()
+    database = get_db()
+    current = database.execute("SELECT * FROM units WHERE id=?", (unit_id,)).fetchone()
+    if current is None:
+        return error("Không tìm thấy đơn vị.", 404)
+    code = text(data.get("code", current["code"])).upper()
+    name = text(data.get("name", current["name"]))
+    status = _master_status(text(data.get("status", current["status"])))
+    errors = {}
+    if not CODE_RE.fullmatch(code):
+        errors["code"] = "Mã đơn vị không hợp lệ."
+    if not name:
+        errors["name"] = "Tên đơn vị là bắt buộc."
+    if status is None:
+        errors["status"] = "Trạng thái không hợp lệ."
+    in_use = database.execute(
+        "SELECT COUNT(*) FROM inventory WHERE unit_id=?", (unit_id,)
+    ).fetchone()[0]
+    if status == "inactive" and in_use:
+        errors["status"] = "Không thể ngừng đơn vị đang được hàng hóa sử dụng."
+    if errors:
+        return error("Dữ liệu đơn vị chưa hợp lệ.", 422, errors)
+    try:
+        database.execute(
+            """UPDATE units SET code=?,name=?,allow_break_pack=?,status=?
+               WHERE id=?""",
+            (
+                code, name, bool(data.get("allow_break_pack", current["allow_break_pack"])),
+                status, unit_id,
+            ),
+        )
+        # Keep the public text alias synchronized with the authoritative FK.
+        database.execute("UPDATE inventory SET unit=? WHERE unit_id=?", (name, unit_id))
+        audit("UPDATE", "unit", unit_id, {"code": code}, g.user["id"], request.remote_addr)
+        database.commit()
+    except IntegrityError:
+        database.rollback()
+        return error("Mã đơn vị đã tồn tại.", 409)
+    return jsonify(ok=True, id=unit_id, message="Đã cập nhật đơn vị.")
 
 
 @bp.get("/inventory")
@@ -442,7 +617,7 @@ def stock_movement_list():
 @csrf_required
 def adjust_inventory(item_id):
     data = json_object()
-    new_quantity = to_int(data.get("new_quantity"))
+    new_quantity = to_quantity(data.get("new_quantity"), allow_zero=True)
     reason = text(data.get("reason"))
     note = text(data.get("note"))
     errors = {}
@@ -701,6 +876,13 @@ def validate_user(data, creating=True):
     return (username, full_name, email, phone, role, status, password), errors
 
 
+def _role_id(database, role):
+    row = database.execute(
+        "SELECT id FROM roles WHERE code = ? AND status='active'", (role.upper(),)
+    ).fetchone()
+    return row["id"] if row else None
+
+
 @bp.post("/users")
 @roles_required("admin")
 @csrf_required
@@ -710,12 +892,16 @@ def user_create():
         return error("Dữ liệu người dùng chưa hợp lệ.", 422, errors)
     username, full_name, email, phone, role, status, password = values
     database = get_db()
+    role_id = _role_id(database, role)
+    if role_id is None:
+        return error("Vai trò chưa được cấu hình.", 409)
     try:
         cursor = database.execute(
             """
             INSERT INTO users
-                (username, password_hash, full_name, email, phone, role, status, avatar_initials)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (username, password_hash, full_name, email, phone, role, role_id,
+                 status, avatar_initials)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 username,
@@ -724,6 +910,7 @@ def user_create():
                 email,
                 phone,
                 role,
+                role_id,
                 status,
                 initials(full_name),
             ),
@@ -756,6 +943,9 @@ def user_update(user_id):
     database = get_db()
     if database.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone() is None:
         return error("Không tìm thấy người dùng.", 404)
+    role_id = _role_id(database, role)
+    if role_id is None:
+        return error("Vai trò chưa được cấu hình.", 409)
     try:
         if password:
             if len(password) < 8:
@@ -767,7 +957,7 @@ def user_update(user_id):
             database.execute(
                 """
                 UPDATE users SET username = ?, full_name = ?, email = ?, phone = ?,
-                    role = ?, status = ?, avatar_initials = ?, password_hash = ?,
+                    role = ?, role_id = ?, status = ?, avatar_initials = ?, password_hash = ?,
                     updated_at = CURRENT_TIMESTAMP WHERE id = ?
                 """,
                 (
@@ -776,6 +966,7 @@ def user_update(user_id):
                     email,
                     phone,
                     role,
+                    role_id,
                     status,
                     initials(full_name),
                     generate_password_hash(password),
@@ -786,7 +977,7 @@ def user_update(user_id):
             database.execute(
                 """
                 UPDATE users SET username = ?, full_name = ?, email = ?, phone = ?,
-                    role = ?, status = ?, avatar_initials = ?,
+                    role = ?, role_id = ?, status = ?, avatar_initials = ?,
                     updated_at = CURRENT_TIMESTAMP WHERE id = ?
                 """,
                 (
@@ -795,6 +986,7 @@ def user_update(user_id):
                     email,
                     phone,
                     role,
+                    role_id,
                     status,
                     initials(full_name),
                     user_id,
@@ -974,6 +1166,10 @@ def _active_lookups():
         "warehouses": _list_rows(
             "SELECT id, code, name FROM warehouses WHERE status='active' ORDER BY name"
         ),
+        "units": _list_rows(
+            """SELECT id, code, name, allow_break_pack
+               FROM units WHERE status='active' ORDER BY name"""
+        ),
     }
 
 
@@ -1009,15 +1205,29 @@ def product_list():
 @csrf_required
 def product_create():
     data = json_object()
+    database = get_db()
     sku, name, unit = text(data.get("sku")).upper(), text(data.get("name")), text(data.get("unit"))
     category_id, warehouse_id = to_int(data.get("category_id")), to_int(data.get("warehouse_id"))
+    unit_id = to_int(data.get("unit_id"))
+    if unit_id:
+        unit_row = database.execute(
+            "SELECT id,name FROM units WHERE id=? AND status='active'", (unit_id,)
+        ).fetchone()
+    else:
+        unit_row = database.execute(
+            """SELECT id,name FROM units WHERE status='active'
+               AND (LOWER(code)=LOWER(?) OR LOWER(name)=LOWER(?))""",
+            (unit, unit),
+        ).fetchone()
+    if unit_row:
+        unit_id, unit = unit_row["id"], unit_row["name"]
     errors = {}
     if not CODE_RE.fullmatch(sku):
         errors["sku"] = "Mã SKU gồm 2–20 chữ, số, gạch ngang hoặc gạch dưới."
     if len(name) < 2:
         errors["name"] = "Tên hàng hóa phải có ít nhất 2 ký tự."
-    if not unit:
-        errors["unit"] = "Vui lòng nhập đơn vị tính."
+    if not unit_row:
+        errors["unit"] = "Vui lòng chọn đơn vị tính đang hoạt động."
     if not category_id:
         errors["category_id"] = "Vui lòng chọn danh mục."
     if not warehouse_id:
@@ -1027,16 +1237,16 @@ def product_create():
         errors["status"] = "Trạng thái không hợp lệ."
     if errors:
         return error("Dữ liệu hàng hóa chưa hợp lệ.", 422, errors)
-    database = get_db()
     try:
         cursor = database.execute(
             """INSERT INTO inventory
-               (sku, barcode, name, category_id, warehouse_id, unit, min_quantity,
+               (sku, barcode, name, category_id, warehouse_id, unit, unit_id, min_quantity,
                 location, description, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 sku, text(data.get("barcode")) or None, name, category_id, warehouse_id,
-                unit, max(to_int(data.get("min_quantity"), 0), 0),
+                unit, unit_id,
+                to_quantity(data.get("min_quantity", 0), allow_zero=True) or 0,
                 text(data.get("location")), text(data.get("description")),
                 status,
             ),
@@ -1157,6 +1367,14 @@ def product_update(product_id):
     sku = text(data.get("sku", current["sku"])).upper()
     name = text(data.get("name", current["name"]))
     unit = text(data.get("unit", current["unit"]))
+    unit_id = to_int(data.get("unit_id"), current["unit_id"])
+    unit_row = database.execute(
+        """SELECT id,name FROM units WHERE status='active' AND
+           (id=? OR LOWER(code)=LOWER(?) OR LOWER(name)=LOWER(?))""",
+        (unit_id, unit, unit),
+    ).fetchone()
+    if unit_row:
+        unit_id, unit = unit_row["id"], unit_row["name"]
     category_id = to_int(data.get("category_id"), current["category_id"])
     warehouse_id = to_int(data.get("warehouse_id"), current["warehouse_id"])
     status = text(data.get("status", current["status"]))
@@ -1165,8 +1383,8 @@ def product_update(product_id):
         errors["sku"] = "Mã SKU không hợp lệ."
     if len(name) < 2:
         errors["name"] = "Tên hàng hóa phải có ít nhất 2 ký tự."
-    if not unit:
-        errors["unit"] = "Đơn vị tính là bắt buộc."
+    if not unit_row:
+        errors["unit"] = "Đơn vị tính phải thuộc danh mục đang hoạt động."
     if status not in {"active", "inactive"}:
         errors["status"] = "Trạng thái không hợp lệ."
     if database.execute("SELECT id FROM categories WHERE id=?", (category_id,)).fetchone() is None:
@@ -1181,12 +1399,15 @@ def product_update(product_id):
     try:
         database.execute(
             """UPDATE inventory SET sku=?,barcode=?,name=?,category_id=?,warehouse_id=?,
-               unit=?,min_quantity=?,location=?,description=?,status=?,
+               unit=?,unit_id=?,min_quantity=?,location=?,description=?,status=?,
                updated_at=CURRENT_TIMESTAMP WHERE id=?""",
             (
                 sku, text(data.get("barcode", current["barcode"])) or None, name,
-                category_id, warehouse_id, unit,
-                max(to_int(data.get("min_quantity"), current["min_quantity"]), 0),
+                category_id, warehouse_id, unit, unit_id,
+                to_quantity(
+                    data.get("min_quantity", current["min_quantity"]),
+                    allow_zero=True,
+                ),
                 text(data.get("location", current["location"])),
                 text(data.get("description", current["description"])),
                 status, product_id,
@@ -1522,7 +1743,7 @@ def _receipt_create(receipt_type):
             """INSERT INTO receipt_items
                (receipt_id,inventory_id,quantity,accepted_quantity,pallet_id,barcode,expiry_date)
                VALUES (?,?,?,?,?,?,?)""",
-            [(cursor.lastrowid, product_id, qty, qty, pallet, barcode, expiry)
+            [(cursor.lastrowid, product_id, qty, 0, pallet, barcode, expiry)
              for product_id, qty, pallet, barcode, expiry in normalized],
         )
         audit("CREATE", f"{receipt_type}_receipt", cursor.lastrowid, {"code": code}, g.user["id"], request.remote_addr)
@@ -1632,7 +1853,7 @@ def _receipt_update(receipt_id, receipt_type):
             break
         normalized.append(
             (
-                product_id, amount, amount, text(item.get("pallet_id")),
+                product_id, amount, 0, text(item.get("pallet_id")),
                 text(item.get("barcode")), expiry or None,
             )
         )
@@ -1899,6 +2120,99 @@ def outbound_picking_list(receipt_id):
     )
 
 
+@bp.post("/outbound-receipts/<int:receipt_id>/start-picking")
+@roles_required("admin", "manager", "staff", "warehouse")
+@csrf_required
+def outbound_start_picking(receipt_id):
+    try:
+        receipt, items = build_picking_list(receipt_id)
+        if receipt.status == "picking":
+            return jsonify(
+                ok=True,
+                message="Phiếu đã ở trạng thái đang lấy hàng.",
+                already_picking=True,
+                item_count=len(items),
+            )
+        if receipt.status != "pending":
+            raise DomainError(
+                "Chỉ phiếu chờ xuất mới có thể bắt đầu lấy hàng."
+            )
+        receipt.status = "picking"
+        audit(
+            "START_PICKING",
+            "outbound_receipt",
+            receipt_id,
+            {"code": receipt.code, "item_count": len(items)},
+            g.user["id"],
+            request.remote_addr,
+        )
+        orm.session.commit()
+    except LookupError:
+        orm.session.rollback()
+        return error("Không tìm thấy phiếu xuất.", 404)
+    except DomainError as exc:
+        orm.session.rollback()
+        return error(str(exc), 409)
+    return jsonify(
+        ok=True,
+        message="Đã chuyển phiếu sang trạng thái đang lấy hàng.",
+        item_count=len(items),
+    )
+
+
+@bp.post("/outbound-receipts/<int:receipt_id>/reject")
+@roles_required("admin", "manager", "staff", "warehouse")
+@csrf_required
+def outbound_reject(receipt_id):
+    reason = text(json_object().get("reason"))
+    if len(reason) < 3:
+        return error(
+            "Phải ghi rõ lý do từ chối phiếu xuất.",
+            422,
+            {"reason": "Lý do phải có ít nhất 3 ký tự."},
+        )
+    database = get_db()
+    receipt = database.execute(
+        "SELECT * FROM receipts WHERE id=? AND receipt_type='outbound'",
+        (receipt_id,),
+    ).fetchone()
+    if receipt is None:
+        return error("Không tìm thấy phiếu xuất.", 404)
+    if receipt["status"] == "rejected":
+        return jsonify(
+            ok=True,
+            message="Phiếu đã bị từ chối trước đó.",
+            already_rejected=True,
+        )
+    if receipt["status"] not in {"pending", "picking"}:
+        return error(
+            "Chỉ phiếu chờ xuất hoặc đang lấy hàng mới có thể bị từ chối.",
+            409,
+        )
+    updated = database.execute(
+        """UPDATE receipts SET status='rejected',note=?,
+           updated_at=CURRENT_TIMESTAMP
+           WHERE id=? AND status IN ('pending','picking')""",
+        (reason, receipt_id),
+    )
+    if updated.rowcount != 1:
+        database.rollback()
+        return error(
+            "Trạng thái phiếu vừa thay đổi; vui lòng tải lại dữ liệu.",
+            409,
+        )
+    audit(
+        "REJECT",
+        "outbound_receipt",
+        receipt_id,
+        {"code": receipt["code"], "reason": reason},
+        g.user["id"],
+        request.remote_addr,
+    )
+    database.commit()
+    return jsonify(ok=True, message="Đã từ chối phiếu xuất.")
+
+
 def _cancel_receipt(receipt_id, expected_type):
     database = get_db()
     receipt = database.execute(
@@ -2005,7 +2319,8 @@ def stocktake_create():
         if not isinstance(item, dict):
             errors["items"] = "Dòng kiểm kê không hợp lệ."
             break
-        product_id, counted = to_int(item.get("inventory_id")), to_int(item.get("counted_quantity"))
+        product_id = to_int(item.get("inventory_id"))
+        counted = to_quantity(item.get("counted_quantity"), allow_zero=True)
         stock = database.execute(
             "SELECT quantity FROM inventory WHERE id=? AND warehouse_id=?", (product_id, warehouse_id)
         ).fetchone()

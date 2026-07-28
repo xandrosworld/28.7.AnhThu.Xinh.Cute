@@ -47,6 +47,27 @@ def test_inbound_confirmation_is_atomic_and_idempotent(client, manager_login):
     assert created.status_code == 201
     receipt_id = created.get_json()["id"]
 
+    not_inspected = client.post(
+        f"/api/inbound-receipts/{receipt_id}/confirm", headers=headers(csrf)
+    )
+    assert not_inspected.status_code == 409
+    receipt = client.get(
+        f"/api/inbound-receipts/{receipt_id}"
+    ).get_json()["item"]
+    inspected = client.post(
+        f"/api/inbound-receipts/{receipt_id}/inspect",
+        json={
+            "items": [
+                {
+                    "id": receipt["items"][0]["id"],
+                    "accepted_quantity": 15,
+                    "issue_note": "",
+                }
+            ]
+        },
+        headers=headers(csrf),
+    )
+    assert inspected.status_code == 200
     confirmed = client.post(
         f"/api/inbound-receipts/{receipt_id}/confirm", headers=headers(csrf)
     )

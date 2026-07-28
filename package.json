@@ -1,0 +1,13 @@
+{
+  "name": "dnp-wms-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cross-browser acceptance tests for DNP WMS",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.0"
+  }
+}

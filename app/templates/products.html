@@ -26,7 +26,7 @@
       <div class="form-group span-full"><label for="product-name">Tên hàng *</label><input id="product-name" name="name" required maxlength="120"><small class="field-error" data-error-for="name"></small></div>
       <div class="form-group"><label>Danh mục *</label><select name="category_id" required></select><small class="field-error" data-error-for="category_id"></small></div>
       <div class="form-group"><label>Kho *</label><select name="warehouse_id" required></select><small class="field-error" data-error-for="warehouse_id"></small></div>
-      <div class="form-group"><label>Đơn vị tính *</label><input name="unit" required placeholder="Thùng, kiện, tấn…"><small class="field-error" data-error-for="unit"></small></div>
+      <div class="form-group"><label>Đơn vị tính *</label><select name="unit_id" required><option value="">Chọn đơn vị tính</option></select><small class="field-error" data-error-for="unit"></small><small class="form-hint">Quản trị viên cấu hình đơn vị tại mục Cấu hình hệ thống.</small></div>
       <div class="form-group"><label>Vị trí</label><input name="location" placeholder="A-01-01"></div>
       <div class="form-group"><label>Ngưỡng cảnh báo</label><input name="min_quantity" type="number" min="0" value="10"></div>
       <div class="form-group"><label>Trạng thái</label><select name="status"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></div>

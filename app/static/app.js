@@ -282,6 +282,8 @@
         ["green", "◆", "Tổng số lượng", data.summary.total_quantity],
         ["amber", "△", "Sắp thiếu", data.summary.low_stock],
         ["red", "×", "Hết hàng", data.summary.out_of_stock],
+        ["blue", "↘", "Nhập kho hôm nay", data.summary.inbound_today],
+        ["green", "↗", "Xuất kho hôm nay", data.summary.outbound_today],
       ];
       $("#dashboard-stats").innerHTML = cards.map(([tone, icon, label, value]) => `
         <article class="stat-card ${tone}"><div class="stat-top"><small>${label}</small><span class="stat-icon">${icon}</span></div><strong>${formatNumber(value)}</strong><small>Cập nhật từ cơ sở dữ liệu</small></article>`).join("");
@@ -670,6 +672,9 @@
     $$('[name="warehouse_id"]', document).forEach((select) => {
       select.innerHTML = optionList(lookups.warehouses, "Chọn kho", select.value);
     });
+    $$('[name="unit_id"]', document).forEach((select) => {
+      select.innerHTML = optionList(lookups.units || [], "Chọn đơn vị tính", select.value);
+    });
     const load = async () => {
       const query = new URLSearchParams(formData(filters));
       const body = $("#product-body");
@@ -891,7 +896,7 @@
 
   function receiptLine(lookups, index, item = {}) {
     return `<tr class="line-row"><td><select name="inventory_id" required aria-label="Hàng hóa dòng ${index + 1}">${optionList(lookups.products, "Chọn hàng hóa", item.inventory_id)}</select></td>
-      <td><input name="quantity" type="number" min="1" step="1" value="${escapeHtml(item.quantity || "")}" required aria-label="Số lượng dòng ${index + 1}"></td>
+      <td><input name="quantity" type="number" min="0.001" step="0.001" value="${escapeHtml(item.quantity || "")}" required aria-label="Số lượng dòng ${index + 1}"></td>
       <td><input name="pallet_id" maxlength="50" value="${escapeHtml(item.pallet_id || "")}" aria-label="Pallet dòng ${index + 1}"></td>
       <td><div class="input-action"><input id="line-barcode-${index}" name="barcode" maxlength="50" value="${escapeHtml(item.barcode || "")}" aria-label="Barcode dòng ${index + 1}"><button class="icon-button scan-trigger" type="button" data-target="line-barcode-${index}" aria-label="Quét barcode">⌗</button></div></td>
       <td><input name="expiry_date" type="date" value="${escapeHtml(item.expiry_date || "")}" aria-label="Hạn dùng dòng ${index + 1}"></td>
@@ -972,6 +977,10 @@
         $("#receipt-cancel")?.classList.toggle("hidden", !["draft", "pending", "picking"].includes(item.status));
         $("#receipt-edit")?.classList.toggle("hidden", item.status !== "draft");
         $("#receipt-inspect")?.classList.toggle("hidden", !["draft", "pending"].includes(item.status));
+        $("#receipt-check-stock")?.classList.toggle("hidden", !["draft", "pending", "picking"].includes(item.status));
+        $("#receipt-picking")?.classList.toggle("hidden", !["pending", "picking"].includes(item.status));
+        $("#receipt-start-picking")?.classList.toggle("hidden", item.status !== "pending");
+        $("#receipt-reject")?.classList.toggle("hidden", !["pending", "picking"].includes(item.status));
         openModal($("#receipt-detail-modal"));
       } catch (error) { toast(error.message, "error"); } finally { setLoading(false); }
     }
@@ -1010,7 +1019,7 @@
     });
     $("#receipt-inspect")?.addEventListener("click", () => {
       if (!currentReceipt) return;
-      $("#inspection-body").innerHTML = currentReceipt.items.map((line) => `<tr class="inspection-line" data-id="${line.id}"><td><span class="sku">${escapeHtml(line.sku)}</span><span class="cell-title">${escapeHtml(line.name)}</span></td><td class="number">${formatNumber(line.quantity)} ${escapeHtml(line.unit)}</td><td><input name="accepted_quantity" type="number" min="0" max="${line.quantity}" value="${line.accepted_quantity ?? line.quantity}" required aria-label="Thực nhận ${escapeHtml(line.name)}"></td><td><input name="issue_note" maxlength="300" value="${escapeHtml(line.issue_note || "")}" placeholder="Thiếu, hỏng hoặc bị từ chối"></td></tr>`).join("");
+      $("#inspection-body").innerHTML = currentReceipt.items.map((line) => `<tr class="inspection-line" data-id="${line.id}"><td><span class="sku">${escapeHtml(line.sku)}</span><span class="cell-title">${escapeHtml(line.name)}</span></td><td class="number">${formatNumber(line.quantity)} ${escapeHtml(line.unit)}</td><td><input name="accepted_quantity" type="number" min="0" max="${line.quantity}" step="0.001" value="${line.accepted_quantity ?? line.quantity}" required aria-label="Thực nhận ${escapeHtml(line.name)}"></td><td><input name="issue_note" maxlength="300" value="${escapeHtml(line.issue_note || "")}" placeholder="Thiếu, hỏng hoặc bị từ chối"></td></tr>`).join("");
       openModal($("#inspection-modal"));
     });
     $("#inspection-form")?.addEventListener("submit", async (event) => {
@@ -1063,7 +1072,7 @@
 
   function stocktakeLine(lookups, index) {
     return `<tr class="stocktake-line"><td><select name="inventory_id" required aria-label="Hàng hóa dòng ${index + 1}">${optionList(lookups.products, "Chọn hàng hóa")}</select></td>
-      <td class="system-quantity">—</td><td><input name="counted_quantity" type="number" min="0" required aria-label="Thực đếm"></td><td><input name="reason" maxlength="200" placeholder="Bắt buộc nếu có chênh lệch" aria-label="Lý do"></td><td><button class="action-button danger line-remove" type="button" aria-label="Xóa dòng">×</button></td></tr>`;
+      <td class="system-quantity">—</td><td><input name="counted_quantity" type="number" min="0" step="0.001" required aria-label="Thực đếm"></td><td><input name="reason" maxlength="200" placeholder="Bắt buộc nếu có chênh lệch" aria-label="Lý do"></td><td><button class="action-button danger line-remove" type="button" aria-label="Xóa dòng">×</button></td></tr>`;
   }
 
   async function initStocktakes() {
@@ -1139,6 +1148,55 @@
         closeModal($("#stocktake-detail-modal")); toast(result.message); await load();
       } catch (error) { toast(error.message, "error"); }
     });
+    $("#receipt-start-picking")?.addEventListener("click", async () => {
+      if (!await confirmAction(
+        "Bắt đầu lấy hàng theo picking list? Phiếu sẽ chuyển sang trạng thái đang lấy hàng.",
+        "Bắt đầu lấy hàng",
+      )) return;
+      try {
+        setLoading(true);
+        const result = await api(
+          `${endpoint}/${$("#receipt-detail-modal").dataset.id}/start-picking`,
+          { method: "POST" },
+        );
+        closeModal($("#receipt-detail-modal"));
+        toast(result.message);
+        await load();
+      } catch (error) {
+        toast(error.message, "error");
+      } finally {
+        setLoading(false);
+      }
+    });
+    $("#receipt-reject")?.addEventListener("click", () => {
+      const rejectForm = $("#receipt-reject-form");
+      rejectForm?.reset();
+      if (rejectForm) clearErrors(rejectForm);
+      openModal($("#receipt-reject-modal"));
+    });
+    $("#receipt-reject-form")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const rejectForm = event.currentTarget;
+      if (!rejectForm.reportValidity()) return;
+      clearErrors(rejectForm);
+      const button = $('button[type="submit"]', rejectForm);
+      setButtonBusy(button, true, "Đang từ chối…");
+      try {
+        const result = await api(
+          `${endpoint}/${$("#receipt-detail-modal").dataset.id}/reject`,
+          { method: "POST", body: JSON.stringify(formData(rejectForm)) },
+        );
+        closeModal($("#receipt-reject-modal"));
+        closeModal($("#receipt-detail-modal"));
+        toast(result.message);
+        await load();
+      } catch (error) {
+        showErrors(rejectForm, error.errors);
+        toast(error.message, "error");
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
     $("#stocktake-cancel")?.addEventListener("click", async () => {
       if (!currentStocktake || !await confirmAction("Hủy phiếu kiểm kê nháp này?", "Hủy phiếu")) return;
       try {
@@ -1192,6 +1250,239 @@
     await load();
   }
 
+  async function initSettings() {
+    const roleBody = $("#role-body");
+    const unitBody = $("#unit-body");
+    const roleForm = $("#role-form");
+    const unitForm = $("#unit-form");
+    let roles = [];
+    let units = [];
+
+    const recordStatus = (item) => item.status || "active";
+    const statusBadge = (item) => {
+      const status = recordStatus(item);
+      return `<span class="badge ${status}">${status === "active" ? "Hoạt động" : "Ngừng hoạt động"}</span>`;
+    };
+    const tableMessage = (message, colspan, error = false, retryClass = "") =>
+      `<tr><td colspan="${colspan}"><div class="empty-state ${error ? "error-state" : ""}" ${error ? 'role="alert"' : ""}>${escapeHtml(message)}${retryClass ? ` <button class="button secondary small ${retryClass}" type="button">Thử lại</button>` : ""}</div></td></tr>`;
+
+    function updateSummary(selector, items, label) {
+      const active = items.filter((item) => recordStatus(item) === "active").length;
+      $(selector).textContent = `${items.length} ${label} · ${active} đang hoạt động`;
+    }
+
+    function bindRoleActions() {
+      $$(".settings-edit-role", roleBody).forEach((button) => button.addEventListener("click", () => {
+        const item = roles.find((entry) => entry.id === Number(button.dataset.id));
+        if (!item) return;
+        roleForm.reset(); clearErrors(roleForm);
+        roleForm.elements.id.value = item.id;
+        roleForm.elements.code.value = item.code || "";
+        roleForm.elements.name.value = item.name || "";
+        roleForm.elements.description.value = item.description || "";
+        roleForm.elements.status.value = recordStatus(item);
+        $("#role-modal-title").textContent = "Cập nhật vai trò";
+        openModal($("#role-modal"));
+      }));
+      $$(".settings-toggle-role", roleBody).forEach((button) => button.addEventListener("click", async () => {
+        const item = roles.find((entry) => entry.id === Number(button.dataset.id));
+        if (!item) return;
+        const next = recordStatus(item) === "active" ? "inactive" : "active";
+        if (!await confirmAction(
+          `${next === "inactive" ? "Ngừng" : "Kích hoạt"} vai trò “${item.name}”?`,
+          next === "inactive" ? "Ngừng hoạt động" : "Kích hoạt",
+        )) return;
+        button.disabled = true;
+        try {
+          const result = await api(`/api/roles/${item.id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              code: item.code,
+              name: item.name,
+              description: item.description || "",
+              status: next,
+            }),
+          });
+          toast(result.message || "Đã cập nhật vai trò.");
+          await loadRoles();
+        } catch (error) {
+          toast(error.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      }));
+    }
+
+    function bindUnitActions() {
+      $$(".settings-edit-unit", unitBody).forEach((button) => button.addEventListener("click", () => {
+        const item = units.find((entry) => entry.id === Number(button.dataset.id));
+        if (!item) return;
+        unitForm.reset(); clearErrors(unitForm);
+        unitForm.elements.id.value = item.id;
+        unitForm.elements.code.value = item.code || "";
+        unitForm.elements.name.value = item.name || "";
+        unitForm.elements.status.value = recordStatus(item);
+        unitForm.elements.allow_break_pack.checked = Boolean(item.allow_break_pack);
+        $("#unit-modal-title").textContent = "Cập nhật đơn vị tính";
+        openModal($("#unit-modal"));
+      }));
+      $$(".settings-toggle-unit", unitBody).forEach((button) => button.addEventListener("click", async () => {
+        const item = units.find((entry) => entry.id === Number(button.dataset.id));
+        if (!item) return;
+        const next = recordStatus(item) === "active" ? "inactive" : "active";
+        if (!await confirmAction(
+          `${next === "inactive" ? "Ngừng" : "Kích hoạt"} đơn vị “${item.name}”?`,
+          next === "inactive" ? "Ngừng hoạt động" : "Kích hoạt",
+        )) return;
+        button.disabled = true;
+        try {
+          const result = await api(`/api/units/${item.id}`, {
+            method: "PUT",
+            body: JSON.stringify({
+              code: item.code,
+              name: item.name,
+              allow_break_pack: Boolean(item.allow_break_pack),
+              status: next,
+            }),
+          });
+          toast(result.message || "Đã cập nhật đơn vị tính.");
+          await loadUnits();
+        } catch (error) {
+          toast(error.message, "error");
+        } finally {
+          button.disabled = false;
+        }
+      }));
+    }
+
+    async function loadRoles() {
+      roleBody.setAttribute("aria-busy", "true");
+      roleBody.innerHTML = tableMessage("Đang tải vai trò…", 5);
+      try {
+        const data = await api("/api/roles");
+        roles = data.items || [];
+        roleBody.innerHTML = roles.length ? roles.map((item) => `
+          <tr>
+            <td><span class="sku">${escapeHtml(item.code)}</span></td>
+            <td><span class="cell-title">${escapeHtml(item.name)}</span></td>
+            <td class="settings-description">${escapeHtml(item.description || "Chưa có mô tả")}</td>
+            <td>${statusBadge(item)}</td>
+            <td><div class="table-actions">
+              <button class="action-button settings-edit-role" data-id="${item.id}" type="button" aria-label="Sửa vai trò ${escapeHtml(item.name)}">Sửa</button>
+              <button class="action-button ${recordStatus(item) === "active" ? "danger" : ""} settings-toggle-role" data-id="${item.id}" type="button">${recordStatus(item) === "active" ? "Ngừng" : "Kích hoạt"}</button>
+            </div></td>
+          </tr>`).join("") : tableMessage("Chưa có vai trò nào.", 5);
+        updateSummary("#role-summary", roles, "vai trò");
+        bindRoleActions();
+      } catch (error) {
+        roleBody.innerHTML = tableMessage(error.message, 5, true, "retry-roles");
+        $(".retry-roles", roleBody)?.addEventListener("click", loadRoles);
+        $("#role-summary").textContent = "Không thể tải dữ liệu vai trò";
+      } finally {
+        roleBody.removeAttribute("aria-busy");
+      }
+    }
+
+    async function loadUnits() {
+      unitBody.setAttribute("aria-busy", "true");
+      unitBody.innerHTML = tableMessage("Đang tải đơn vị tính…", 5);
+      try {
+        const data = await api("/api/units");
+        units = data.items || [];
+        unitBody.innerHTML = units.length ? units.map((item) => `
+          <tr>
+            <td><span class="sku">${escapeHtml(item.code)}</span></td>
+            <td><span class="cell-title">${escapeHtml(item.name)}</span></td>
+            <td><span class="badge ${item.allow_break_pack ? "info" : "neutral"}">${item.allow_break_pack ? "Cho phép" : "Nguyên kiện"}</span></td>
+            <td>${statusBadge(item)}</td>
+            <td><div class="table-actions">
+              <button class="action-button settings-edit-unit" data-id="${item.id}" type="button" aria-label="Sửa đơn vị ${escapeHtml(item.name)}">Sửa</button>
+              <button class="action-button ${recordStatus(item) === "active" ? "danger" : ""} settings-toggle-unit" data-id="${item.id}" type="button">${recordStatus(item) === "active" ? "Ngừng" : "Kích hoạt"}</button>
+            </div></td>
+          </tr>`).join("") : tableMessage("Chưa có đơn vị tính nào.", 5);
+        updateSummary("#unit-summary", units, "đơn vị");
+        bindUnitActions();
+      } catch (error) {
+        unitBody.innerHTML = tableMessage(error.message, 5, true, "retry-units");
+        $(".retry-units", unitBody)?.addEventListener("click", loadUnits);
+        $("#unit-summary").textContent = "Không thể tải dữ liệu đơn vị tính";
+      } finally {
+        unitBody.removeAttribute("aria-busy");
+      }
+    }
+
+    $("#role-add")?.addEventListener("click", () => {
+      roleForm.reset(); clearErrors(roleForm);
+      roleForm.elements.id.value = "";
+      roleForm.elements.status.value = "active";
+      $("#role-modal-title").textContent = "Thêm vai trò";
+      openModal($("#role-modal"));
+    });
+    $("#unit-add")?.addEventListener("click", () => {
+      unitForm.reset(); clearErrors(unitForm);
+      unitForm.elements.id.value = "";
+      unitForm.elements.status.value = "active";
+      $("#unit-modal-title").textContent = "Thêm đơn vị tính";
+      openModal($("#unit-modal"));
+    });
+
+    roleForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!roleForm.reportValidity()) return;
+      clearErrors(roleForm);
+      const payload = formData(roleForm);
+      const id = payload.id; delete payload.id;
+      payload.code = payload.code.trim().toLowerCase();
+      payload.name = payload.name.trim();
+      payload.description = payload.description.trim();
+      const button = $('button[type="submit"]', roleForm);
+      setButtonBusy(button, true);
+      try {
+        const result = await api(id ? `/api/roles/${id}` : "/api/roles", {
+          method: id ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        });
+        closeModal($("#role-modal"));
+        toast(result.message || "Đã lưu vai trò.");
+        await loadRoles();
+      } catch (error) {
+        showErrors(roleForm, error.errors);
+        toast(error.message, "error");
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
+
+    unitForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!unitForm.reportValidity()) return;
+      clearErrors(unitForm);
+      const payload = formData(unitForm);
+      const id = payload.id; delete payload.id;
+      payload.code = payload.code.trim().toUpperCase();
+      payload.name = payload.name.trim();
+      payload.allow_break_pack = unitForm.elements.allow_break_pack.checked;
+      const button = $('button[type="submit"]', unitForm);
+      setButtonBusy(button, true);
+      try {
+        const result = await api(id ? `/api/units/${id}` : "/api/units", {
+          method: id ? "PUT" : "POST",
+          body: JSON.stringify(payload),
+        });
+        closeModal($("#unit-modal"));
+        toast(result.message || "Đã lưu đơn vị tính.");
+        await loadUnits();
+      } catch (error) {
+        showErrors(unitForm, error.errors);
+        toast(error.message, "error");
+      } finally {
+        setButtonBusy(button, false);
+      }
+    });
+
+    await Promise.all([loadRoles(), loadUnits()]);
+  }
+
   function initNetworkStatus() {
     const banner = $("#offline-banner");
     const update = () => banner?.classList.toggle("hidden", navigator.onLine);
@@ -1215,6 +1506,7 @@
       if (page === "stocktakes") await initStocktakes();
       if (page === "reports") await initReports();
       if (page === "users") await initUsers();
+      if (page === "settings") await initSettings();
       if (page === "profile") initProfile();
       if (page === "audit") await loadAudit();
     } catch (error) {

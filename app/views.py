@@ -81,6 +81,12 @@ def audit_logs():
     return render_template("audit.html", page="audit")
 
 
+@bp.get("/settings")
+@page_roles_required("admin")
+def settings():
+    return render_template("settings.html", page="settings")
+
+
 @bp.get("/products")
 @page_login_required
 def products():

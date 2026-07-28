@@ -26,10 +26,11 @@ Các lệnh chính xác được duy trì trong `README.md` và workflow CI đ�
 liệu lệch với code. Job SQL Server phải thực sự chạy migration và test; không
 được thay bằng SQLite dưới cùng tên job.
 
-## Bằng chứng CI đã nghiệm thu
+## Bằng chứng CI baseline
 
 [GitHub Actions run 30346223947](https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute/actions/runs/30346223947)
-tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**:
+tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` là bằng chứng của
+**baseline trước migration hiện tại** và đã thành công:
 
 - SQLite/Python 3.10: đạt.
 - SQLite/Python 3.12: đạt.
@@ -39,10 +40,67 @@ tại SHA `c4a2ad80fd2a5b894f6969d2604359786add8f87` đã **thành công**:
 - Test cạnh tranh xác nhận xuất dùng hai transaction/kết nối độc lập đã chạy
   và đạt trên SQL Server thật.
 
-## Backup
+Revision hiện tại bổ sung migration ràng buộc vai trò/đơn vị tính và inspection
+bắt buộc, vì vậy phải chạy lại job SQL Server sau khi push. Không kế thừa trạng thái
+đạt của baseline cho revision mới; chỉ cập nhật tài liệu nghiệm thu khi có URL run
+và SHA tương ứng.
 
-- Development SQLite: dùng CLI backup/restore của ứng dụng.
-- SQL Server: dùng chính sách backup `.bak`/transaction log của SQL Server và
-  kiểm tra phục hồi định kỳ trên database khác.
-- Không phục hồi đè database đang vận hành nếu chưa dừng ghi dữ liệu và có bản
-  backup được xác minh.
+## Backup và kiểm tra phục hồi
+
+Development SQLite dùng CLI backup/restore của ứng dụng. Với SQL Server, tài
+khoản thực hiện cần quyền backup phù hợp và thư mục đích phải được SQL Server
+service account cho phép ghi. Thay đường dẫn, tên database và ngày giờ theo môi
+trường thật.
+
+Tạo full backup có checksum:
+
+```sql
+BACKUP DATABASE [dnp_wms]
+TO DISK = N'D:\SQLBackups\dnp_wms_full_20260728.bak'
+WITH COPY_ONLY, COMPRESSION, CHECKSUM, INIT, STATS = 10;
+GO
+
+RESTORE VERIFYONLY
+FROM DISK = N'D:\SQLBackups\dnp_wms_full_20260728.bak'
+WITH CHECKSUM;
+GO
+```
+
+Nếu dùng recovery model `FULL`, bổ sung backup transaction log theo lịch:
+
+```sql
+BACKUP LOG [dnp_wms]
+TO DISK = N'D:\SQLBackups\dnp_wms_log_20260728_1200.trn'
+WITH COMPRESSION, CHECKSUM, INIT, STATS = 10;
+GO
+```
+
+Không kiểm tra bằng cách ghi đè database đang vận hành. Trước hết lấy logical
+file name trong bản backup:
+
+```sql
+RESTORE FILELISTONLY
+FROM DISK = N'D:\SQLBackups\dnp_wms_full_20260728.bak';
+GO
+```
+
+Sau đó thay `<logical_data_name>` và `<logical_log_name>` bằng hai giá trị trả
+về, rồi phục hồi sang database kiểm tra riêng:
+
+```sql
+RESTORE DATABASE [dnp_wms_restore_check]
+FROM DISK = N'D:\SQLBackups\dnp_wms_full_20260728.bak'
+WITH
+  MOVE N'<logical_data_name>' TO N'D:\SQLData\dnp_wms_restore_check.mdf',
+  MOVE N'<logical_log_name>' TO N'D:\SQLData\dnp_wms_restore_check_log.ldf',
+  RECOVERY, CHECKSUM, REPLACE, STATS = 10;
+GO
+
+DBCC CHECKDB ([dnp_wms_restore_check]) WITH NO_INFOMSGS;
+GO
+```
+
+Biên bản backup cần ghi thời điểm, người thực hiện, kích thước file, kết quả
+`RESTORE VERIFYONLY`, kết quả `DBCC CHECKDB` và thời gian phục hồi. Chỉ coi quy
+trình đạt khi phục hồi thử trên database riêng thành công; không commit file
+`.bak`, `.trn`, mật khẩu hay chuỗi kết nối thật vào Git.

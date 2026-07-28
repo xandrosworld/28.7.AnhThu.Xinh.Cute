@@ -61,6 +61,9 @@
           <a class="nav-item {{ 'active' if page == 'users' }}" href="{{ url_for('views.users') }}">
             <span aria-hidden="true">♙</span> Người dùng
           </a>
+          <a class="nav-item {{ 'active' if page == 'settings' }}" href="{{ url_for('views.settings') }}">
+            <span aria-hidden="true">⚙</span> Cấu hình hệ thống
+          </a>
           <a class="nav-item {{ 'active' if page == 'audit' }}" href="{{ url_for('views.audit_logs') }}">
             <span aria-hidden="true">≣</span> Nhật ký hệ thống
           </a>
