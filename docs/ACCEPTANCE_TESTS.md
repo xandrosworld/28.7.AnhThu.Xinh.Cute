@@ -1,7 +1,7 @@
 # Kịch bản kiểm thử chấp nhận
 
 Chạy `python -m pytest -q`. Kết quả xác nhận gần nhất:
-**14/14 test đạt, coverage 88%**.
+**17/17 test đạt, coverage 88%**.
 
 | ID | Vai trò / thao tác | Kết quả mong đợi |
 |---|---|---|

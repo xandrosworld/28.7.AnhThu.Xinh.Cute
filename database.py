@@ -5,20 +5,40 @@ from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 
 
+REQUIRED_DATABASE_COLUMNS = {
+    "users": {"id", "username", "password_hash", "role", "status"},
+    "suppliers": {"id", "code", "name", "status"},
+    "warehouses": {"id", "code", "name", "status"},
+    "products": {"id", "sku", "barcode", "unit", "current_stock"},
+    "receipts": {"id", "code", "status", "received_date"},
+    "receipt_items": {
+        "id", "receipt_id", "product_id", "actual_qty", "rejected_qty",
+        "pallet_id", "barcode", "unit",
+    },
+    "inspections": {"id", "receipt_id", "result"},
+    "inventory_lots": {"id", "receipt_item_id", "pallet_id", "quantity"},
+    "stock_movements": {"id", "receipt_id", "product_id", "type", "quantity"},
+    "audit_logs": {"id", "action", "entity_type"},
+}
+
+
 def init_database(path, seed=True):
     """Create the SQLite schema and optional deterministic demonstration data."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     connection = sqlite3.connect(path)
-    connection.execute("PRAGMA foreign_keys = ON")
-    migrate_legacy_schema(connection)
-    schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
-    with open(schema_path, encoding="utf-8") as schema_file:
-        connection.executescript(schema_file.read())
-    if seed:
-        product_count = connection.execute("SELECT COUNT(*) FROM products").fetchone()[0]
-        seed_database(connection, seed_demo=product_count == 0)
-    connection.commit()
-    connection.close()
+    try:
+        connection.execute("PRAGMA foreign_keys = ON")
+        migrate_legacy_schema(connection)
+        schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+        with open(schema_path, encoding="utf-8") as schema_file:
+            connection.executescript(schema_file.read())
+        backfill_inventory_lots(connection)
+        if seed:
+            product_count = connection.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+            seed_database(connection, seed_demo=product_count == 0)
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def migrate_legacy_schema(db):
@@ -37,20 +57,36 @@ def migrate_legacy_schema(db):
     def columns(table):
         return {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
 
+    receipt_item_columns = columns("receipt_items") if "receipt_items" in tables else set()
+    receipt_item_sql = (
+        db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='receipt_items'"
+        ).fetchone()[0]
+        if "receipt_items" in tables
+        else ""
+    )
+    normalized_receipt_item_sql = "".join(receipt_item_sql.lower().split())
+    rebuild_receipt_items = bool(
+        receipt_item_columns
+        and (
+            not {
+                "rejected_qty", "rejection_reason", "pallet_id",
+                "barcode", "unit", "expiry_date",
+            }.issubset(receipt_item_columns)
+            or "check(actual_qty>0)" in normalized_receipt_item_sql
+        )
+    )
+    if rebuild_receipt_items:
+        # The original schema rejected actual_qty=0, which makes a fully
+        # rejected inbound line impossible to inspect after migration.
+        db.execute("PRAGMA foreign_keys = OFF")
+
     additions = {
         "products": [("barcode", "TEXT")],
         "receipts": [
             ("seal_no", "TEXT DEFAULT ''"),
             ("created_by", "INTEGER"),
             ("completed_by", "INTEGER"),
-        ],
-        "receipt_items": [
-            ("rejected_qty", "REAL NOT NULL DEFAULT 0"),
-            ("rejection_reason", "TEXT DEFAULT ''"),
-            ("pallet_id", "TEXT"),
-            ("barcode", "TEXT"),
-            ("unit", "TEXT"),
-            ("expiry_date", "TEXT"),
         ],
         "inspections": [("inspected_by_user_id", "INTEGER")],
         "audit_logs": [("actor_user_id", "INTEGER")],
@@ -66,17 +102,122 @@ def migrate_legacy_schema(db):
         "UPDATE products SET barcode='LEGACY-' || sku WHERE barcode IS NULL OR barcode=''"
     )
     if "receipt_items" in tables:
-        db.execute(
-            """UPDATE receipt_items
-               SET pallet_id='LEGACY-PLT-' || id
-               WHERE pallet_id IS NULL OR pallet_id=''"""
-        )
-        db.execute(
-            """UPDATE receipt_items
-               SET barcode=(SELECT barcode FROM products WHERE products.id=receipt_items.product_id),
-                   unit=(SELECT unit FROM products WHERE products.id=receipt_items.product_id)
-               WHERE barcode IS NULL OR barcode='' OR unit IS NULL OR unit=''"""
-        )
+        if rebuild_receipt_items:
+            def old_or_default(name, default):
+                return name if name in receipt_item_columns else default
+
+            db.execute(
+                """
+                CREATE TABLE receipt_items_migrated (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    receipt_id INTEGER NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+                    product_id INTEGER NOT NULL REFERENCES products(id),
+                    planned_qty REAL NOT NULL CHECK(planned_qty > 0),
+                    actual_qty REAL CHECK(actual_qty >= 0),
+                    rejected_qty REAL NOT NULL DEFAULT 0 CHECK(rejected_qty >= 0),
+                    rejection_reason TEXT DEFAULT '',
+                    unit_price REAL NOT NULL DEFAULT 0 CHECK(unit_price >= 0),
+                    pallet_id TEXT NOT NULL UNIQUE,
+                    barcode TEXT NOT NULL,
+                    unit TEXT NOT NULL,
+                    expiry_date TEXT,
+                    UNIQUE(receipt_id, product_id)
+                )
+                """
+            )
+            pallet = old_or_default(
+                "pallet_id", "'LEGACY-PLT-' || receipt_items.id"
+            )
+            barcode = old_or_default(
+                "barcode",
+                "(SELECT barcode FROM products WHERE products.id=receipt_items.product_id)",
+            )
+            unit = old_or_default(
+                "unit",
+                "(SELECT unit FROM products WHERE products.id=receipt_items.product_id)",
+            )
+            db.execute(
+                f"""
+                INSERT INTO receipt_items_migrated
+                (id,receipt_id,product_id,planned_qty,actual_qty,rejected_qty,
+                 rejection_reason,unit_price,pallet_id,barcode,unit,expiry_date)
+                SELECT id,receipt_id,product_id,planned_qty,actual_qty,
+                       COALESCE({old_or_default("rejected_qty", "0")},0),
+                       COALESCE({old_or_default("rejection_reason", "''")},''),
+                       unit_price,
+                       COALESCE(NULLIF({pallet},''),'LEGACY-PLT-' || receipt_items.id),
+                       COALESCE(NULLIF({barcode},''),
+                           (SELECT barcode FROM products WHERE products.id=receipt_items.product_id)),
+                       COALESCE(NULLIF({unit},''),
+                           (SELECT unit FROM products WHERE products.id=receipt_items.product_id)),
+                       {old_or_default("expiry_date", "NULL")}
+                FROM receipt_items
+                """
+            )
+            db.execute("DROP TABLE receipt_items")
+            db.execute("ALTER TABLE receipt_items_migrated RENAME TO receipt_items")
+            db.commit()
+            db.execute("PRAGMA foreign_keys = ON")
+        else:
+            db.execute(
+                """UPDATE receipt_items
+                   SET pallet_id='LEGACY-PLT-' || id
+                   WHERE pallet_id IS NULL OR pallet_id=''"""
+            )
+            db.execute(
+                """UPDATE receipt_items
+                   SET barcode=(SELECT barcode FROM products WHERE products.id=receipt_items.product_id),
+                       unit=(SELECT unit FROM products WHERE products.id=receipt_items.product_id)
+                   WHERE barcode IS NULL OR barcode='' OR unit IS NULL OR unit=''"""
+            )
+
+
+def backfill_inventory_lots(db):
+    """Represent completed legacy receipts in the pallet-level inventory view."""
+    db.execute(
+        """
+        INSERT OR IGNORE INTO inventory_lots
+        (product_id,receipt_item_id,warehouse,pallet_id,barcode,unit,
+         quantity,received_at,expiry_date)
+        SELECT i.product_id,i.id,r.warehouse,i.pallet_id,i.barcode,i.unit,
+               i.actual_qty,COALESCE(r.completed_at,r.received_date),i.expiry_date
+        FROM receipt_items i JOIN receipts r ON r.id=i.receipt_id
+        WHERE r.status='completed' AND i.actual_qty > 0
+        """
+    )
+
+
+def validate_database(db):
+    """Reject corrupt, foreign-key-invalid, or non-WMS SQLite restore sources."""
+    try:
+        if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise ValueError("File sao lưu không vượt qua kiểm tra toàn vẹn.")
+        if db.execute("PRAGMA foreign_key_check").fetchone():
+            raise ValueError("File sao lưu có liên kết khóa ngoại không hợp lệ.")
+        tables = {
+            row[0]
+            for row in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        missing_tables = REQUIRED_DATABASE_COLUMNS.keys() - tables
+        if missing_tables:
+            raise ValueError(
+                "File không phải bản sao WMS hợp lệ (thiếu bảng: "
+                + ", ".join(sorted(missing_tables))
+                + ")."
+            )
+        for table, required in REQUIRED_DATABASE_COLUMNS.items():
+            present = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+            missing = required - present
+            if missing:
+                raise ValueError(
+                    f"File sao lưu thiếu cột bắt buộc của bảng {table}: "
+                    + ", ".join(sorted(missing))
+                    + "."
+                )
+    except sqlite3.DatabaseError as exc:
+        raise ValueError(f"File sao lưu SQLite không hợp lệ: {exc}") from exc
 
 
 def seed_database(db, seed_demo=True):

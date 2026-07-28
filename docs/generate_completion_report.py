@@ -58,7 +58,7 @@ def main():
     document.add_heading("3. Kết quả kiểm thử đã xác nhận", level=2)
     document.add_paragraph(
         "Lệnh: python -m pytest -q — Kết quả tại thời điểm lập phụ lục: "
-        "14/14 kiểm thử đạt; coverage app/database đạt 88%."
+        "17/17 kiểm thử đạt; coverage app/database đạt 88%."
     )
     add_table(
         document,

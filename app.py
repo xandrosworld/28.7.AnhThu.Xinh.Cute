@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import math
 import os
 import secrets
 import sqlite3
@@ -182,6 +183,16 @@ def create_app(test_config=None):
             return jsonify(error=message), 400
         return render_template("error.html", title="Dữ liệu không hợp lệ", message=message), 400
 
+    @app.errorhandler(405)
+    def method_not_allowed(_error):
+        if request.path.startswith("/api/"):
+            return jsonify(error="Phương thức HTTP không được hỗ trợ."), 405
+        return render_template(
+            "error.html",
+            title="Phương thức không được hỗ trợ",
+            message="Phương thức HTTP không được hỗ trợ cho tài nguyên này.",
+        ), 405
+
     @app.route("/")
     def index():
         return redirect(url_for("dashboard"))
@@ -324,6 +335,13 @@ def create_app(test_config=None):
         status = request.args.get("status", "").strip()
         start = request.args.get("start", "").strip()
         end = request.args.get("end", "").strip()
+        try:
+            start_date = date.fromisoformat(start) if start else None
+            end_date = date.fromisoformat(end) if end else None
+            if start_date and end_date and start_date > end_date:
+                raise ValueError
+        except ValueError:
+            return jsonify(error="Khoảng ngày lọc không hợp lệ."), 400
         clauses, params = [], []
         if search:
             clauses.append("(r.code LIKE ? OR r.supplier LIKE ? OR r.warehouse LIKE ?)")
@@ -356,15 +374,18 @@ def create_app(test_config=None):
     @app.post("/api/receipts")
     @roles_required("ADMIN", "CS")
     def api_receipt_create():
-        data = request.get_json(silent=True) or {}
+        data = json_object()
         errors = validate_receipt(data)
         errors.extend(validate_receipt_master(get_db, data))
         if errors:
             return jsonify(error="; ".join(errors)), 400
         now = datetime.now().isoformat(timespec="seconds")
-        code = make_receipt_code(get_db)
         try:
             with get_db() as db:
+                # Serialize code allocation with the insert so two valid concurrent
+                # requests cannot observe and attempt to use the same sequence.
+                db.execute("BEGIN IMMEDIATE")
+                code = make_receipt_code(db)
                 cursor = db.execute(
                     """
                     INSERT INTO receipts
@@ -378,10 +399,10 @@ def create_app(test_config=None):
                         data["warehouse"].strip(),
                         data["received_date"],
                         "pending",
-                        data.get("vehicle_no", "").strip(),
-                        data.get("container_no", "").strip(),
-                        data.get("seal_no", "").strip(),
-                        data.get("note", "").strip(),
+                        clean_text(data.get("vehicle_no")),
+                        clean_text(data.get("container_no")),
+                        clean_text(data.get("seal_no")),
+                        clean_text(data.get("note")),
                         g.user["id"],
                         now,
                         now,
@@ -420,7 +441,7 @@ def create_app(test_config=None):
     @app.put("/api/receipts/<int:receipt_id>")
     @roles_required("ADMIN", "CS")
     def api_receipt_update(receipt_id):
-        data = request.get_json(silent=True) or {}
+        data = json_object()
         errors = validate_receipt(data)
         errors.extend(validate_receipt_master(get_db, data))
         if errors:
@@ -442,10 +463,10 @@ def create_app(test_config=None):
                         data["supplier"].strip(),
                         data["warehouse"].strip(),
                         data["received_date"],
-                        data.get("vehicle_no", "").strip(),
-                        data.get("container_no", "").strip(),
-                        data.get("seal_no", "").strip(),
-                        data.get("note", "").strip(),
+                        clean_text(data.get("vehicle_no")),
+                        clean_text(data.get("container_no")),
+                        clean_text(data.get("seal_no")),
+                        clean_text(data.get("note")),
                         now,
                         receipt_id,
                     ),
@@ -474,8 +495,10 @@ def create_app(test_config=None):
     @app.post("/api/receipts/<int:receipt_id>/inspection")
     @roles_required("ADMIN", "WAREHOUSE")
     def api_inspection(receipt_id):
-        data = request.get_json(silent=True) or {}
-        checklist = data.get("checklist") or {}
+        data = json_object()
+        checklist = data.get("checklist")
+        if not isinstance(checklist, dict):
+            checklist = {}
         result = data.get("result")
         missing = [key for key in CHECKLIST_KEYS if checklist.get(key) not in {"pass", "fail"}]
         if missing:
@@ -484,10 +507,23 @@ def create_app(test_config=None):
             return jsonify(error="Kết quả kiểm tra không hợp lệ."), 400
         if result == "pass" and any(value == "fail" for value in checklist.values()):
             return jsonify(error="Không thể chọn Đạt khi checklist còn tiêu chí không đạt."), 400
-        actual_quantities = data.get("actual_quantities") or {}
-        rejected_quantities = data.get("rejected_quantities") or {}
-        rejection_reasons = data.get("rejection_reasons") or {}
-        scanned_barcodes = data.get("scanned_barcodes") or {}
+        mappings = {
+            key: data.get(key) or {}
+            for key in (
+                "actual_quantities",
+                "rejected_quantities",
+                "rejection_reasons",
+                "scanned_barcodes",
+            )
+        }
+        if any(not isinstance(value, dict) for value in mappings.values()):
+            return jsonify(error="Dữ liệu kiểm đếm theo mặt hàng không hợp lệ."), 400
+        if "note" in data and data["note"] is not None and not isinstance(data["note"], str):
+            return jsonify(error="Ghi chú kiểm tra phải là chuỗi."), 400
+        actual_quantities = mappings["actual_quantities"]
+        rejected_quantities = mappings["rejected_quantities"]
+        rejection_reasons = mappings["rejection_reasons"]
+        scanned_barcodes = mappings["scanned_barcodes"]
         now = datetime.now().isoformat(timespec="seconds")
         with get_db() as db:
             receipt = db.execute("SELECT * FROM receipts WHERE id=?", (receipt_id,)).fetchone()
@@ -501,8 +537,10 @@ def create_app(test_config=None):
             for item in items:
                 raw = actual_quantities.get(str(item["id"]))
                 try:
-                    qty = float(raw)
-                    rejected_qty = float(rejected_quantities.get(str(item["id"]), 0) or 0)
+                    qty = finite_float(raw)
+                    rejected_qty = finite_float(
+                        rejected_quantities.get(str(item["id"]), 0) or 0
+                    )
                 except (TypeError, ValueError):
                     return jsonify(error="Số lượng chấp nhận/từ chối phải là số không âm."), 400
                 reason = str(rejection_reasons.get(str(item["id"]), "")).strip()
@@ -534,7 +572,7 @@ def create_app(test_config=None):
                     receipt_id,
                     json.dumps(checklist, ensure_ascii=False),
                     result,
-                    data.get("note", "").strip(),
+                    clean_text(data.get("note")),
                     g.user["full_name"],
                     g.user["id"],
                     now,
@@ -621,7 +659,12 @@ def create_app(test_config=None):
             db.commit()
         except sqlite3.IntegrityError:
             db.rollback()
-            return jsonify(message="Phiếu đã được ghi nhận tồn kho.", already_completed=True)
+            receipt = db.execute(
+                "SELECT status FROM receipts WHERE id=?", (receipt_id,)
+            ).fetchone()
+            if receipt and receipt["status"] == "completed":
+                return jsonify(message="Phiếu đã được ghi nhận tồn kho.", already_completed=True)
+            return jsonify(error="Không thể ghi nhận tồn kho do xung đột dữ liệu."), 409
         finally:
             db.close()
         return jsonify(message="Hoàn tất nhập kho và cập nhật tồn kho.", already_completed=False)
@@ -752,7 +795,7 @@ def create_app(test_config=None):
             writer.writerow(list(row))
         return Response(
             output.getvalue(),
-            mimetype="text/csv; charset=utf-8",
+            content_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": f"attachment; filename=bao-cao-nhap-kho-{start}-{end}.csv"},
         )
 
@@ -771,8 +814,12 @@ def create_app(test_config=None):
         destination = destination or os.path.join(
             app.instance_path, "backups", f"wms-{datetime.now():%Y%m%d-%H%M%S}.sqlite3"
         )
-        os.makedirs(os.path.dirname(os.path.abspath(destination)), exist_ok=True)
-        source = sqlite3.connect(app.config["DATABASE"])
+        destination = os.path.abspath(destination)
+        database_path = os.path.abspath(app.config["DATABASE"])
+        if os.path.normcase(destination) == os.path.normcase(database_path):
+            raise click.ClickException("File sao lưu phải khác cơ sở dữ liệu hiện hành.")
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        source = sqlite3.connect(database_path)
         target = sqlite3.connect(destination)
         try:
             source.backup(target)
@@ -785,15 +832,26 @@ def create_app(test_config=None):
     @click.option("--source", required=True, type=click.Path(exists=True, dir_okay=False))
     def restore_db_command(source):
         """Restore a valid SQLite backup into the configured database."""
-        source_db = sqlite3.connect(source)
+        from database import validate_database
+
+        source_path = os.path.abspath(source)
+        target_path = os.path.abspath(app.config["DATABASE"])
+        if os.path.normcase(source_path) == os.path.normcase(target_path):
+            raise click.ClickException("File phục hồi phải khác cơ sở dữ liệu hiện hành.")
+        source_db = sqlite3.connect(source_path)
         try:
-            if source_db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise click.ClickException("File sao lưu không vượt qua kiểm tra toàn vẹn.")
-            target_db = sqlite3.connect(app.config["DATABASE"])
+            validate_database(source_db)
+            target_db = sqlite3.connect(target_path)
             try:
                 source_db.backup(target_db)
             finally:
                 target_db.close()
+        except click.ClickException:
+            raise
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
+        except sqlite3.DatabaseError as exc:
+            raise click.ClickException(f"Không thể phục hồi file sao lưu: {exc}") from exc
         finally:
             source_db.close()
         click.echo(f"Đã phục hồi từ: {source}")
@@ -803,13 +861,32 @@ def create_app(test_config=None):
 
 
 def validate_receipt(data):
+    if not isinstance(data, dict):
+        return ["Dữ liệu phiếu nhập phải là một đối tượng JSON"]
     errors = []
-    for key, label in (("supplier", "Nhà cung cấp"), ("warehouse", "Kho"), ("received_date", "Ngày nhập")):
-        if not str(data.get(key, "")).strip():
+    text_fields = {
+        "supplier": "Nhà cung cấp",
+        "warehouse": "Kho",
+        "received_date": "Ngày nhập",
+        "vehicle_no": "Biển số xe",
+        "container_no": "Số container",
+        "seal_no": "Số seal",
+        "note": "Ghi chú",
+    }
+    for key, label in text_fields.items():
+        value = data.get(key)
+        if value is not None and not isinstance(value, str):
+            errors.append(f"{label} phải là chuỗi")
+    for key, label in (
+        ("supplier", "Nhà cung cấp"),
+        ("warehouse", "Kho"),
+        ("received_date", "Ngày nhập"),
+    ):
+        if not clean_text(data.get(key)):
             errors.append(f"{label} là bắt buộc")
     try:
-        datetime.fromisoformat(str(data.get("received_date", "")))
-    except ValueError:
+        datetime.fromisoformat(clean_text(data.get("received_date")))
+    except (TypeError, ValueError):
         errors.append("Ngày nhập không đúng định dạng")
     items = data.get("items")
     if not isinstance(items, list) or not items:
@@ -818,18 +895,28 @@ def validate_receipt(data):
     seen = set()
     seen_pallets = set()
     for index, item in enumerate(items, 1):
+        if not isinstance(item, dict):
+            errors.append(f"Dòng {index}: dữ liệu hàng hóa không hợp lệ")
+            continue
         try:
-            product_id = int(item.get("product_id"))
-            qty = float(item.get("planned_qty"))
-            price = float(item.get("unit_price", 0))
+            product_id = positive_int(item.get("product_id"))
+            qty = finite_float(item.get("planned_qty"))
+            price = finite_float(item.get("unit_price", 0))
         except (TypeError, ValueError):
             errors.append(f"Dòng {index}: dữ liệu hàng hóa không hợp lệ")
             continue
         if product_id in seen:
             errors.append(f"Dòng {index}: mặt hàng bị trùng")
         seen.add(product_id)
-        pallet_id = str(item.get("pallet_id", "")).strip().upper()
-        barcode = str(item.get("barcode", "")).strip()
+        for key, label in (
+            ("pallet_id", "pallet ID"),
+            ("barcode", "barcode"),
+            ("expiry_date", "hạn sử dụng"),
+        ):
+            if key in item and item[key] is not None and not isinstance(item[key], str):
+                errors.append(f"Dòng {index}: {label} phải là chuỗi")
+        pallet_id = clean_text(item.get("pallet_id")).upper()
+        barcode = clean_text(item.get("barcode"))
         if not pallet_id:
             errors.append(f"Dòng {index}: pallet ID là bắt buộc")
         elif pallet_id in seen_pallets:
@@ -837,7 +924,7 @@ def validate_receipt(data):
         seen_pallets.add(pallet_id)
         if not barcode:
             errors.append(f"Dòng {index}: barcode là bắt buộc")
-        expiry_date = str(item.get("expiry_date", "")).strip()
+        expiry_date = clean_text(item.get("expiry_date"))
         if expiry_date:
             try:
                 date.fromisoformat(expiry_date)
@@ -897,14 +984,46 @@ def validate_receipt_master(get_db, data):
     return errors
 
 
-def make_receipt_code(get_db):
+def make_receipt_code(db):
     prefix = f"NK-{date.today():%Y%m%d}-"
-    with get_db() as db:
-        last = db.execute(
-            "SELECT code FROM receipts WHERE code LIKE ? ORDER BY code DESC LIMIT 1", (f"{prefix}%",)
-        ).fetchone()
+    last = db.execute(
+        "SELECT code FROM receipts WHERE code LIKE ? ORDER BY code DESC LIMIT 1",
+        (f"{prefix}%",),
+    ).fetchone()
     sequence = int(last["code"].rsplit("-", 1)[-1]) + 1 if last else 1
     return f"{prefix}{sequence:03d}"
+
+
+def json_object():
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
+def clean_text(value):
+    return value.strip() if isinstance(value, str) else ""
+
+
+def finite_float(value):
+    if isinstance(value, bool):
+        raise ValueError("boolean is not a numeric quantity")
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("number must be finite")
+    return number
+
+
+def positive_int(value):
+    if isinstance(value, bool):
+        raise ValueError("boolean is not an identifier")
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        number = int(value.strip())
+    else:
+        raise ValueError("identifier must be an integer")
+    if number <= 0:
+        raise ValueError("identifier must be positive")
+    return number
 
 
 def add_audit(db, action, entity_type, entity_id, details):

@@ -362,7 +362,7 @@ class WmsAcceptanceTestCase(unittest.TestCase):
         self.assertEqual(no_rows.get_json()["summary"]["receipt_count"], 0)
         export = self.client.get("/reports/export.csv?start=2000-01-01&end=2100-01-01")
         self.assertTrue(export.data.startswith(b"\xef\xbb\xbf"))
-        self.assertIn("text/csv", export.content_type)
+        self.assertEqual(export.content_type, "text/csv; charset=utf-8")
         decoded = export.data.decode("utf-8-sig")
         self.assertIn("Pallet ID", decoded)
         self.assertIn("Barcode", decoded)
@@ -399,6 +399,132 @@ class WmsAcceptanceTestCase(unittest.TestCase):
         finally:
             if os.path.exists(backup):
                 os.unlink(backup)
+
+    def test_malformed_payloads_numbers_dates_and_api_errors(self):
+        _, token = self.login()
+        headers = {"X-CSRF-Token": token}
+
+        malformed = self.receipt_payload("PLT-MALFORMED")
+        malformed["note"] = 17
+        self.assertEqual(
+            self.client.post("/api/receipts", json=malformed, headers=headers).status_code,
+            400,
+        )
+
+        fractional_id = self.receipt_payload("PLT-FRACTIONAL")
+        fractional_id["items"][0]["product_id"] = 2.9
+        self.assertEqual(
+            self.client.post("/api/receipts", json=fractional_id, headers=headers).status_code,
+            400,
+        )
+
+        infinite = self.receipt_payload("PLT-INFINITE")
+        infinite["items"][0]["planned_qty"] = float("inf")
+        self.assertEqual(
+            self.client.post("/api/receipts", json=infinite, headers=headers).status_code,
+            400,
+        )
+
+        self.assertEqual(
+            self.client.get("/api/receipts?start=not-a-date").status_code, 400
+        )
+        self.assertEqual(
+            self.client.get(
+                "/api/receipts?start=2026-12-31&end=2026-01-01"
+            ).status_code,
+            400,
+        )
+        wrong_method = self.client.post("/api/products", json={}, headers=headers)
+        self.assertEqual(wrong_method.status_code, 405)
+        self.assertTrue(wrong_method.is_json)
+
+    def test_restore_rejects_non_wms_sqlite_without_touching_target(self):
+        handle, wrong_database = tempfile.mkstemp(suffix=".sqlite3")
+        os.close(handle)
+        try:
+            db = sqlite3.connect(wrong_database)
+            try:
+                db.execute("CREATE TABLE unrelated(value TEXT)")
+                db.commit()
+            finally:
+                db.close()
+            with self.app.get_db() as db:
+                before = db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+            result = self.app.test_cli_runner().invoke(
+                args=["restore-db", "--source", wrong_database]
+            )
+            self.assertNotEqual(result.exit_code, 0)
+            with self.app.get_db() as db:
+                after = db.execute("SELECT COUNT(*) FROM products").fetchone()[0]
+            self.assertEqual(after, before)
+        finally:
+            os.unlink(wrong_database)
+
+    def test_legacy_migration_allows_zero_accepted_quantity(self):
+        handle, legacy_path = tempfile.mkstemp(suffix=".sqlite3")
+        os.close(handle)
+        legacy_schema = """
+            CREATE TABLE products (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sku TEXT NOT NULL UNIQUE, name TEXT NOT NULL, category TEXT NOT NULL,
+                unit TEXT NOT NULL, current_stock REAL NOT NULL DEFAULT 0,
+                min_stock REAL NOT NULL DEFAULT 0, unit_price REAL NOT NULL DEFAULT 0
+            );
+            CREATE TABLE receipts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL UNIQUE,
+                supplier TEXT NOT NULL, warehouse TEXT NOT NULL, received_date TEXT NOT NULL,
+                status TEXT NOT NULL, vehicle_no TEXT DEFAULT '', container_no TEXT DEFAULT '',
+                note TEXT DEFAULT '', created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                completed_at TEXT
+            );
+            CREATE TABLE receipt_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                receipt_id INTEGER NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                planned_qty REAL NOT NULL CHECK(planned_qty > 0),
+                actual_qty REAL CHECK(actual_qty > 0),
+                unit_price REAL NOT NULL DEFAULT 0 CHECK(unit_price >= 0),
+                UNIQUE(receipt_id, product_id)
+            );
+        """
+        try:
+            db = sqlite3.connect(legacy_path)
+            try:
+                db.executescript(legacy_schema)
+                db.execute(
+                    """INSERT INTO products
+                       (sku,name,category,unit,current_stock,min_stock,unit_price)
+                       VALUES('LEG-1','Legacy','Legacy','Cái',0,0,1)"""
+                )
+                db.execute(
+                    """INSERT INTO receipts
+                       (code,supplier,warehouse,received_date,status,created_at,updated_at)
+                       VALUES('LEG-R','Công ty Thép Đông Á','Kho A','2026-01-01',
+                              'pending','2026-01-01','2026-01-01')"""
+                )
+                db.execute(
+                    """INSERT INTO receipt_items
+                       (receipt_id,product_id,planned_qty,actual_qty,unit_price)
+                       VALUES(1,1,7,NULL,1)"""
+                )
+                db.commit()
+            finally:
+                db.close()
+            init_database(legacy_path)
+            db = sqlite3.connect(legacy_path)
+            try:
+                db.execute("UPDATE receipt_items SET actual_qty=0 WHERE id=1")
+                pallet, barcode, unit = db.execute(
+                    "SELECT pallet_id,barcode,unit FROM receipt_items WHERE id=1"
+                ).fetchone()
+                db.commit()
+            finally:
+                db.close()
+            self.assertEqual(pallet, "LEGACY-PLT-1")
+            self.assertEqual(barcode, "LEGACY-LEG-1")
+            self.assertEqual(unit, "Cái")
+        finally:
+            os.unlink(legacy_path)
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ python -m compileall -q app.py database.py
 Bộ test acceptance bao phủ đăng nhập, tài khoản khóa, RBAC, CSRF, master data,
 validation, barcode/pallet/đơn vị, kiểm tra thực nhận, phần hàng từ chối,
 transaction hoàn tất, idempotency, tồn theo lô, báo cáo, CSV, audit và
-backup/restore. Kết quả xác nhận gần nhất: **14/14 test đạt, coverage 88%**.
+backup/restore. Kết quả xác nhận gần nhất: **17/17 test đạt, coverage 88%**.
 
 ## Sao lưu và phục hồi
 
@@ -63,8 +63,9 @@ flask --app app backup-db --destination backups/wms-demo.sqlite3
 flask --app app restore-db --source backups/wms-demo.sqlite3
 ```
 
-Nên dừng thao tác ghi trong lúc phục hồi. Lệnh restore kiểm tra
-`PRAGMA integrity_check` trước khi thay dữ liệu đích.
+Nên dừng thao tác ghi trong lúc phục hồi. Lệnh restore kiểm tra toàn vẹn,
+khóa ngoại và cấu trúc WMS trước khi thay dữ liệu đích; lệnh backup/restore
+cũng từ chối dùng chính file cơ sở dữ liệu hiện hành làm nguồn/đích.
 
 ## Cấu trúc
 
