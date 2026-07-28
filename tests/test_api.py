@@ -43,12 +43,20 @@ def test_health_and_all_pages_render(client):
         response = client.get(path)
         assert response.status_code == 200
         assert "DNP Logistics" in response.get_data(as_text=True)
+    for path in (
+        "/xuat-kho/tao", "/xuat-kho/1/sua", "/xuat-kho/1/kiem-tra",
+    ):
+        assert "Quy trình phiếu xuất cũ đã ngừng" in client.get(path).get_data(as_text=True)
 
 
-def test_product_crud_search_filter_and_validation(client):
+def test_product_crud_search_filter_and_validation(client, db):
     created = client.post("/api/products", json=product_payload())
     assert created.status_code == 201
     product_id = created.json["id"]
+    assert db.execute(
+        "SELECT SUM(quantity) FROM inventory_lots WHERE product_id=? AND active=1",
+        (product_id,),
+    ).fetchone()[0] == 20
 
     detail = client.get(f"/api/products/{product_id}")
     assert detail.status_code == 200
@@ -65,6 +73,10 @@ def test_product_crud_search_filter_and_validation(client):
     )
     assert updated.status_code == 200
     assert client.get(f"/api/products/{product_id}").json["status"] == "low_stock"
+    assert db.execute(
+        "SELECT SUM(quantity) FROM inventory_lots WHERE product_id=? AND active=1",
+        (product_id,),
+    ).fetchone()[0] == 4
 
     invalid = client.post("/api/products", json=product_payload(
         sku="BAD", barcode="8930000000999", quantity=101, max_stock=100,
@@ -74,6 +86,9 @@ def test_product_crud_search_filter_and_validation(client):
     deleted = client.delete(f"/api/products/{product_id}")
     assert deleted.status_code == 200
     assert client.get(f"/api/products/{product_id}").status_code == 404
+    assert db.execute(
+        "SELECT COUNT(*) FROM inventory_lots WHERE product_id=?", (product_id,)
+    ).fetchone()[0] == 0
 
 
 def test_category_crud_and_prevent_delete_when_in_use(client):
@@ -92,92 +107,48 @@ def test_category_crud_and_prevent_delete_when_in_use(client):
     assert client.delete(f"/api/categories/{category_id}").status_code == 409
 
 
-def test_order_edit_delete_and_duplicate_line_validation(client):
-    duplicate = order_payload()
-    duplicate["items"].append({"product_id": 1, "quantity": 1})
-    assert client.post("/api/outbound-orders", json=duplicate).status_code == 400
-
-    created = client.post("/api/outbound-orders", json=order_payload())
-    assert created.status_code == 201
-    order_id = created.json["id"]
-    update = order_payload(quantity=3)
-    update["customer_name"] = "Khách hàng đã sửa"
-    assert client.put(f"/api/outbound-orders/{order_id}", json=update).status_code == 200
-    assert client.get(f"/api/outbound-orders/{order_id}").json["total_quantity"] == 3
-    assert client.delete(f"/api/outbound-orders/{order_id}").status_code == 200
-    assert client.get(f"/api/outbound-orders/{order_id}").status_code == 404
+def test_legacy_outbound_get_endpoints_remain_read_only(client):
+    listing = client.get("/api/outbound-orders")
+    assert listing.status_code == 200
+    assert listing.json["items"]
+    order_id = listing.json["items"][0]["id"]
+    assert client.get("/api/outbound-orders/stats").status_code == 200
+    assert client.get(f"/api/outbound-orders/{order_id}").status_code == 200
+    assert client.get("/api/outbound-history").status_code == 200
 
 
-def test_complete_requires_inspection_and_deducts_stock_once(client, db):
-    before = db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0]
-    order_id = client.post("/api/outbound-orders", json=order_payload(quantity=4)).json["id"]
+def test_legacy_outbound_mutations_return_410_without_writes(client, db):
+    order_id = db.execute("SELECT id FROM outbound_orders ORDER BY id LIMIT 1").fetchone()[0]
+    before = {
+        "orders": db.execute("SELECT COUNT(*) FROM outbound_orders").fetchone()[0],
+        "status": db.execute(
+            "SELECT status FROM outbound_orders WHERE id=?", (order_id,)
+        ).fetchone()[0],
+        "quantity": db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0],
+        "inspections": db.execute("SELECT COUNT(*) FROM outbound_inspections").fetchone()[0],
+        "movements": db.execute("SELECT COUNT(*) FROM stock_movements").fetchone()[0],
+    }
+    attempts = [
+        client.post("/api/outbound-orders", json=order_payload()),
+        client.put(f"/api/outbound-orders/{order_id}", json=order_payload()),
+        client.delete(f"/api/outbound-orders/{order_id}"),
+        client.post(f"/api/outbound-orders/{order_id}/validate-stock"),
+        client.put(f"/api/outbound-orders/{order_id}/inspection", json={"items": []}),
+        client.post(
+            f"/api/outbound-orders/{order_id}/status",
+            json={"status": "completed"},
+        ),
+    ]
+    for response in attempts:
+        assert response.status_code == 410
+        assert response.is_json
+        assert response.json["error"]["code"] == "USE_COMPLIANT_WORKFLOW"
+        assert response.json["error"]["fields"]["workflow"] == "/api/outbound-receipts"
 
-    started = client.post(
-        f"/api/outbound-orders/{order_id}/status", json={"status": "processing"},
-    )
-    assert started.status_code == 200
-    no_inspection = client.post(
-        f"/api/outbound-orders/{order_id}/status", json={"status": "completed"},
-    )
-    assert no_inspection.status_code == 409
-    assert db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0] == before
-
-    inspection = client.put(f"/api/outbound-orders/{order_id}/inspection", json={
-        "items": [{"product_id": 1, "actual_quantity": 4, "condition_ok": True, "note": "Đủ"}],
-    })
-    assert inspection.status_code == 200
-    assert inspection.json["passed"] is True
-
-    completed = client.post(
-        f"/api/outbound-orders/{order_id}/status", json={"status": "completed"},
-    )
-    assert completed.status_code == 200
-    assert db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0] == before - 4
-    movement = db.execute(
-        "SELECT * FROM stock_movements WHERE order_id=?", (order_id,),
-    ).fetchone()
-    assert movement["quantity_before"] == before
-    assert movement["quantity_after"] == before - 4
-    assert movement["quantity_change"] == -4
-
-    repeated = client.post(
-        f"/api/outbound-orders/{order_id}/status", json={"status": "completed"},
-    )
-    assert repeated.status_code == 409
-    assert db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0] == before - 4
+    assert db.execute("SELECT COUNT(*) FROM outbound_orders").fetchone()[0] == before["orders"]
     assert db.execute(
-        "SELECT COUNT(*) FROM stock_movements WHERE order_id=?", (order_id,),
-    ).fetchone()[0] == 1
-
-
-def test_insufficient_stock_is_atomic_and_never_goes_negative(client, db):
-    assert db.execute("SELECT quantity FROM products WHERE id=3").fetchone()[0] == 0
-    order_id = client.post(
-        "/api/outbound-orders", json=order_payload(product_id=3, quantity=1),
-    ).json["id"]
-    client.post(f"/api/outbound-orders/{order_id}/status", json={"status": "processing"})
-    inspection = client.put(f"/api/outbound-orders/{order_id}/inspection", json={
-        "items": [{"product_id": 3, "actual_quantity": 1, "condition_ok": True, "note": ""}],
-    })
-    assert inspection.status_code == 200
-    assert inspection.json["passed"] is False
-    completion = client.post(
-        f"/api/outbound-orders/{order_id}/status", json={"status": "completed"},
-    )
-    assert completion.status_code == 409
-    assert db.execute("SELECT quantity FROM products WHERE id=3").fetchone()[0] == 0
-    assert db.execute(
-        "SELECT COUNT(*) FROM stock_movements WHERE order_id=?", (order_id,),
-    ).fetchone()[0] == 0
-    assert client.get(f"/api/outbound-orders/{order_id}").json["status"] == "processing"
-
-
-def test_cannot_modify_completed_order(client):
-    order_id = client.post("/api/outbound-orders", json=order_payload()).json["id"]
-    client.post(f"/api/outbound-orders/{order_id}/status", json={"status": "processing"})
-    client.put(f"/api/outbound-orders/{order_id}/inspection", json={
-        "items": [{"product_id": 1, "actual_quantity": 2, "condition_ok": True, "note": ""}],
-    })
-    client.post(f"/api/outbound-orders/{order_id}/status", json={"status": "completed"})
-    assert client.put(f"/api/outbound-orders/{order_id}", json=order_payload()).status_code == 409
-    assert client.delete(f"/api/outbound-orders/{order_id}").status_code == 409
+        "SELECT status FROM outbound_orders WHERE id=?", (order_id,)
+    ).fetchone()[0] == before["status"]
+    assert db.execute("SELECT quantity FROM products WHERE id=1").fetchone()[0] == before["quantity"]
+    assert db.execute("SELECT COUNT(*) FROM outbound_inspections").fetchone()[0] == before["inspections"]
+    assert db.execute("SELECT COUNT(*) FROM stock_movements").fetchone()[0] == before["movements"]

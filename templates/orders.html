@@ -2,9 +2,9 @@
 {% block title %}Quản lý xuất kho · DNP Logistics{% endblock %}
 {% block content %}
 <section class="page-heading">
-  <div><p class="eyebrow">KHO HÀNG / XUẤT KHO</p><h1>Quản lý xuất kho</h1><p>Theo dõi đầy đủ vòng đời phiếu và kiểm soát tồn trước khi xuất.</p></div>
-  <a class="btn primary" href="{{ url_for('page_6') }}">＋ Tạo phiếu xuất</a>
+  <div><p class="eyebrow">KHO HÀNG / DỮ LIỆU CŨ</p><h1>Phiếu xuất cũ</h1><p>Dữ liệu lịch sử chỉ đọc; không dùng màn hình này để tạo, sửa, kiểm tra hoặc hoàn thành phiếu.</p></div>
 </section>
+<div class="alert">Quy trình an toàn dùng email hợp đồng và picking FEFO/FIFO được cung cấp tại <code>/api/outbound-receipts</code> cho ứng dụng khách đã được phê duyệt.</div>
 <section class="stats-grid four" id="order-stats">
   <article class="stat-card"><span class="stat-icon blue">◷</span><div><b data-stat="pending">—</b><small>Chờ duyệt</small></div></article>
   <article class="stat-card"><span class="stat-icon amber">↻</span><div><b data-stat="processing">—</b><small>Đang xử lý</small></div></article>

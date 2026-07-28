@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Quy trình phiếu xuất cũ đã ngừng · DNP Logistics{% endblock %}
+{% block content %}
+<div class="breadcrumb"><a href="{{ url_for('page_5') }}">Phiếu xuất cũ</a><span>›</span><span>Chỉ đọc</span></div>
+<section class="panel">
+  <h1>Quy trình phiếu xuất cũ đã ngừng</h1>
+  <p>Không thể tạo, sửa, kiểm tra hoặc hoàn thành phiếu tại màn hình này vì quy trình cũ không bảo đảm email hợp đồng và xuất kho theo lô FEFO/FIFO.</p>
+  <p>Hãy dùng quy trình WMS tại <code>/api/outbound-receipts</code> thông qua ứng dụng khách đã được phê duyệt.</p>
+  <a class="btn" href="{{ url_for('page_5') }}">Xem dữ liệu phiếu cũ</a>
+</section>
+{% endblock %}

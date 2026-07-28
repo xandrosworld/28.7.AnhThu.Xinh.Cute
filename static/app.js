@@ -3,6 +3,7 @@
 const body = document.body;
 const page = body.dataset.page;
 const entityId = Number(body.dataset.id || 0);
+let csrfToken = "";
 const money = new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("vi-VN");
 const statusText = { pending: "Chờ duyệt", processing: "Đang xử lý", completed: "Hoàn thành", cancelled: "Đã hủy" };
@@ -13,11 +14,17 @@ const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, c => (
 ));
 
 async function api(path, options = {}) {
-  const config = { headers: { "Content-Type": "application/json" }, ...options };
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (csrfToken && options.method && !["GET", "HEAD"].includes(options.method)) {
+    headers["X-CSRF-Token"] = csrfToken;
+  }
+  const config = { ...options, headers, credentials: "same-origin" };
   const response = await fetch(path, config);
   let data;
   try { data = await response.json(); } catch { data = {}; }
   if (!response.ok) {
+    if (response.status === 401 && page !== "login") location.assign("/login");
+    if (data.error && typeof data.error === "object") data.error = data.error.message;
     const error = new Error(data.error || "Không thể xử lý yêu cầu.");
     error.details = data.details;
     throw error;
@@ -232,12 +239,8 @@ async function initOrders() {
       document.querySelectorAll("[data-stat]").forEach(node => node.textContent = number.format(stats[node.dataset.stat] || 0));
       rows.innerHTML = result.items.length ? result.items.map(order => `<tr>
         <td><a class="sku" href="/xuat-kho/${order.id}">${escapeHtml(order.code)}</a></td><td>${isoDate(order.outbound_date)}</td><td class="product-cell"><b>${escapeHtml(order.customer_name)}</b><span class="subtext">${escapeHtml(order.vehicle_no || "Chưa có biển số")}</span></td><td>${number.format(order.line_count)}</td><td>${number.format(order.total_quantity)}</td><td class="number">${money.format(order.total_value)}</td><td>${orderStatus(order)}</td>
-        <td><div class="actions"><a class="icon-btn" href="/xuat-kho/${order.id}" title="Xem chi tiết">◉</a>${["pending","processing"].includes(order.status) ? `<a class="icon-btn" href="/xuat-kho/${order.id}/sua" title="Chỉnh sửa">✎</a><a class="icon-btn" href="/xuat-kho/${order.id}/kiem-tra" title="Kiểm tra">✓</a><button class="icon-btn delete" data-delete="${order.id}" data-code="${escapeHtml(order.code)}" title="Xóa">×</button>` : ""}</div></td></tr>`).join("") : '<tr><td colspan="8" class="empty">Không tìm thấy phiếu xuất phù hợp.</td></tr>';
+        <td><div class="actions"><a class="icon-btn" href="/xuat-kho/${order.id}" title="Xem chi tiết chỉ đọc">◉</a></div></td></tr>`).join("") : '<tr><td colspan="8" class="empty">Không tìm thấy phiếu xuất phù hợp.</td></tr>';
       renderPagination(document.querySelector("#pagination"), result.pagination, load);
-      rows.querySelectorAll("[data-delete]").forEach(button => button.onclick = async () => {
-        if (!await confirmAction(`Xóa phiếu ${button.dataset.code}?`)) return;
-        try { await api(`/api/outbound-orders/${button.dataset.delete}`, { method: "DELETE" }); toast("Đã xóa phiếu."); load(result.pagination.page); } catch (error) { handleError(error); }
-      });
     } catch (error) { handleError(error); } finally { setLoading(rows.closest(".panel"), false); }
   }
   form.onsubmit = event => { event.preventDefault(); load(); };
@@ -328,8 +331,7 @@ async function initOrderDetail() {
   const target = document.querySelector("#order-detail");
   try {
     const o = await api(`/api/outbound-orders/${entityId}`);
-    let actions = '<a class="btn" href="/xuat-kho">Quay lại</a>';
-    if (["pending","processing"].includes(o.status)) actions += `<a class="btn" href="/xuat-kho/${o.id}/sua">✎ Chỉnh sửa</a><a class="btn primary" href="/xuat-kho/${o.id}/kiem-tra">✓ Kiểm tra xuất</a>`;
+    const actions = '<a class="btn" href="/xuat-kho">Quay lại danh sách chỉ đọc</a>';
     target.innerHTML = `${detailHero(o, actions)}<div class="detail-grid"><section class="panel"><h2>Thông tin giao nhận</h2><dl class="info-list"><div><dt>Khách hàng</dt><dd>${escapeHtml(o.customer_name)}</dd></div><div><dt>Điện thoại</dt><dd>${escapeHtml(o.phone || "—")}</dd></div><div><dt>Mã số thuế</dt><dd>${escapeHtml(o.tax_code || "—")}</dd></div><div><dt>Địa chỉ</dt><dd>${escapeHtml(o.address || "—")}</dd></div><div><dt>Biển số xe</dt><dd>${escapeHtml(o.vehicle_no || "—")}</dd></div><div><dt>Container / Seal</dt><dd>${escapeHtml(o.container_no || "—")} / ${escapeHtml(o.seal_no || "—")}</dd></div></dl></section>
     <section class="panel"><h2>Tóm tắt</h2><dl class="summary"><div><dt>Số mặt hàng</dt><dd>${number.format(o.line_count)}</dd></div><div><dt>Tổng số lượng</dt><dd>${number.format(o.total_quantity)}</dd></div><div><dt>Tổng giá trị</dt><dd>${money.format(o.total_value)}</dd></div></dl><p><b>Ghi chú:</b> ${escapeHtml(o.note || "Không có")}</p></section></div>
     <section class="panel"><h2>Chi tiết hàng hóa</h2>${orderItemsTable(o)}</section>
@@ -390,6 +392,12 @@ async function initHistory() {
 }
 
 function initShell() {
+  document.querySelector("#logout-button")?.addEventListener("click", async () => {
+    try {
+      await api("/api/auth/logout", { method: "POST", body: "{}" });
+      location.assign("/login");
+    } catch (error) { handleError(error); }
+  });
   const menu = document.querySelector("#menu-toggle"), sidebar = document.querySelector("#sidebar");
   menu?.addEventListener("click", () => { const open = sidebar.classList.toggle("open"); menu.setAttribute("aria-expanded", String(open)); });
   document.addEventListener("click", event => { if (innerWidth <= 820 && sidebar.classList.contains("open") && !sidebar.contains(event.target) && event.target !== menu) { sidebar.classList.remove("open"); menu.setAttribute("aria-expanded", "false"); } });
@@ -402,11 +410,34 @@ function initShell() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  if (page === "login") {
+    const form = document.querySelector("#login-form");
+    form?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const alert = document.querySelector("#login-alert");
+      alert.textContent = "";
+      try {
+        const result = await api("/api/auth/login", {
+          method: "POST", body: JSON.stringify(fieldData(form)),
+        });
+        csrfToken = result.csrf_token;
+        location.assign("/");
+      } catch (error) { alert.textContent = error.message; }
+    });
+    return;
+  }
+  try {
+    const sessionResult = await api("/api/auth/me");
+    csrfToken = sessionResult.csrf_token;
+  } catch (error) {
+    handleError(error);
+    return;
+  }
   initShell();
   const init = {
     products: initProducts, "product-create": initProductForm, "product-edit": initProductForm,
-    "product-detail": initProductDetail, orders: initOrders, "order-create": initOrderForm,
-    "order-edit": initOrderForm, "order-detail": initOrderDetail, inspection: initInspection, history: initHistory,
+    "product-detail": initProductDetail, orders: initOrders,
+    "order-detail": initOrderDetail, history: initHistory,
   }[page];
   try { await init?.(); } catch (error) { handleError(error); }
 });

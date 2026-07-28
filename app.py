@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 from flask import Flask, g, jsonify, render_template, request
+
+from wms import register_wms
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,6 +26,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
         DATABASE=os.environ.get("DNP_DATABASE", str(BASE_DIR / "instance" / "dnp_wms.sqlite3")),
+        DATABASE_URL=os.environ.get("DATABASE_URL", ""),
+        SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+        SESSION_COOKIE_SECURE=os.environ.get("SESSION_COOKIE_SECURE") == "1",
         JSON_AS_ASCII=False,
     )
     if test_config:
@@ -32,7 +40,14 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     def get_db() -> sqlite3.Connection:
         if "db" not in g:
-            g.db = sqlite3.connect(app.config["DATABASE"])
+            if app.config["DATABASE"] == ":memory:":
+                connection = app.extensions.get("memory_database")
+                if connection is None:
+                    connection = sqlite3.connect(":memory:")
+                    app.extensions["memory_database"] = connection
+                g.db = connection
+            else:
+                g.db = sqlite3.connect(app.config["DATABASE"])
             g.db.row_factory = sqlite3.Row
             g.db.execute("PRAGMA foreign_keys = ON")
             g.db.execute("PRAGMA busy_timeout = 5000")
@@ -41,7 +56,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.teardown_appcontext
     def close_db(_error=None):
         db = g.pop("db", None)
-        if db is not None:
+        if db is not None and app.config["DATABASE"] != ":memory:":
             db.close()
 
     def init_db(seed: bool = True) -> None:
@@ -59,6 +74,7 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     register_page_routes(app)
     register_api_routes(app, get_db)
+    register_wms(app, get_db)
     return app
 
 
@@ -70,10 +86,10 @@ def register_page_routes(app: Flask) -> None:
         "/hang-hoa/<int:item_id>": ("product_detail.html", "product-detail"),
         "/hang-hoa/<int:item_id>/sua": ("product_form.html", "product-edit"),
         "/xuat-kho": ("orders.html", "orders"),
-        "/xuat-kho/tao": ("order_form.html", "order-create"),
+        "/xuat-kho/tao": ("legacy_readonly.html", "legacy-disabled"),
         "/xuat-kho/<int:item_id>": ("order_detail.html", "order-detail"),
-        "/xuat-kho/<int:item_id>/sua": ("order_form.html", "order-edit"),
-        "/xuat-kho/<int:item_id>/kiem-tra": ("inspection.html", "inspection"),
+        "/xuat-kho/<int:item_id>/sua": ("legacy_readonly.html", "legacy-disabled"),
+        "/xuat-kho/<int:item_id>/kiem-tra": ("legacy_readonly.html", "legacy-disabled"),
         "/lich-su-xuat-kho": ("history.html", "history"),
     }
 
@@ -93,7 +109,17 @@ def register_page_routes(app: Flask) -> None:
 def register_api_routes(app: Flask, get_db) -> None:
     @app.errorhandler(ApiError)
     def api_error(error):
-        return jsonify({"error": error.message, "details": error.details}), error.status
+        return jsonify(
+            {
+                "error": {
+                    "code": "BUSINESS_ERROR",
+                    "message": error.message,
+                    "fields": error.details or {},
+                },
+                "message": error.message,
+                "details": error.details,
+            }
+        ), error.status
 
     @app.get("/api/categories")
     def categories_list():
@@ -224,15 +250,32 @@ def register_api_routes(app: Flask, get_db) -> None:
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (*values, timestamp, timestamp),
             )
+            sync_manual_inventory_lot(
+                get_db(), cursor.lastrowid, values[5], values[6], values[7], timestamp
+            )
             get_db().commit()
         except sqlite3.IntegrityError:
+            get_db().rollback()
             raise ApiError("SKU hoặc barcode đã tồn tại.", 409)
+        except Exception:
+            get_db().rollback()
+            raise
         return jsonify({"id": cursor.lastrowid, "message": "Đã thêm hàng hóa."}), 201
 
     @app.put("/api/products/<int:item_id>")
     def product_update(item_id):
         ensure_exists(get_db(), "products", item_id, "Hàng hóa")
+        current = get_db().execute(
+            "SELECT quantity FROM products WHERE id=?", (item_id,)
+        ).fetchone()
         values = validate_product(get_db(), json_body())
+        if values[7] != current["quantity"] and get_db().execute(
+            "SELECT 1 FROM wms_movements WHERE product_id=? LIMIT 1", (item_id,)
+        ).fetchone():
+            raise ApiError(
+                "Không thể sửa tồn trực tiếp sau khi đã phát sinh biến động kho; hãy dùng kiểm kê.",
+                409,
+            )
         try:
             get_db().execute(
                 """UPDATE products SET sku=?, barcode=?, name=?, description=?,
@@ -240,19 +283,35 @@ def register_api_routes(app: Flask, get_db) -> None:
                    max_stock=?, unit_price=?, updated_at=? WHERE id=?""",
                 (*values, now_iso(), item_id),
             )
+            sync_manual_inventory_lot(
+                get_db(), item_id, values[5], values[6], values[7], now_iso()
+            )
             get_db().commit()
         except sqlite3.IntegrityError:
+            get_db().rollback()
             raise ApiError("SKU hoặc barcode đã tồn tại.", 409)
+        except Exception:
+            get_db().rollback()
+            raise
         return {"message": "Đã cập nhật hàng hóa."}
 
     @app.delete("/api/products/<int:item_id>")
     def product_delete(item_id):
         ensure_exists(get_db(), "products", item_id, "Hàng hóa")
-        used = get_db().execute(
-            "SELECT COUNT(*) FROM outbound_items WHERE product_id=?", (item_id,)
-        ).fetchone()[0]
+        used = sum(
+            get_db().execute(query, (item_id,)).fetchone()[0]
+            for query in (
+                "SELECT COUNT(*) FROM outbound_items WHERE product_id=?",
+                "SELECT COUNT(*) FROM inbound_items WHERE product_id=?",
+                "SELECT COUNT(*) FROM wms_movements WHERE product_id=?",
+            )
+        )
         if used:
             raise ApiError("Không thể xóa hàng hóa đã phát sinh phiếu xuất.", 409)
+        get_db().execute(
+            "DELETE FROM inventory_lots WHERE product_id=? AND pallet_id=?",
+            (item_id, f"MANUAL-{item_id}"),
+        )
         get_db().execute("DELETE FROM products WHERE id=?", (item_id,))
         get_db().commit()
         return {"message": "Đã xóa hàng hóa."}
@@ -575,6 +634,53 @@ def validate_product(db, payload: dict) -> tuple:
         sku, barcode, name, description, category_id, unit, location,
         quantity, min_stock, max_stock, unit_price,
     )
+
+
+def sync_manual_inventory_lot(db, product_id, unit, location, desired_quantity, timestamp):
+    """Keep legacy product CRUD consistent with the lot-based WMS balance."""
+    if not db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='inventory_lots'"
+    ).fetchone():
+        return
+    warehouse = db.execute(
+        "SELECT id FROM warehouses WHERE active=1 ORDER BY id LIMIT 1"
+    ).fetchone()
+    if not warehouse:
+        raise ApiError("Cần ít nhất một kho đang hoạt động để ghi nhận tồn.", 409)
+    pallet_id = f"MANUAL-{product_id}"
+    manual = db.execute(
+        "SELECT * FROM inventory_lots WHERE product_id=? AND pallet_id=?",
+        (product_id, pallet_id),
+    ).fetchone()
+    other_quantity = db.execute(
+        """SELECT COALESCE(SUM(quantity),0) FROM inventory_lots
+           WHERE product_id=? AND active=1 AND pallet_id<>?""",
+        (product_id, pallet_id),
+    ).fetchone()[0]
+    manual_quantity = float(desired_quantity) - float(other_quantity)
+    if manual_quantity < -0.001:
+        raise ApiError(
+            "Tồn nhập trực tiếp không thể thấp hơn tổng tồn của các lô nghiệp vụ.",
+            409,
+        )
+    manual_quantity = max(0, manual_quantity)
+    if manual:
+        db.execute(
+            """UPDATE inventory_lots
+               SET warehouse_id=?,unit=?,location=?,quantity=?,active=1
+               WHERE id=?""",
+            (warehouse["id"], unit, location, manual_quantity, manual["id"]),
+        )
+    elif manual_quantity:
+        db.execute(
+            """INSERT INTO inventory_lots
+               (pallet_id,barcode,product_id,warehouse_id,unit,location,received_at,quantity)
+               VALUES(?,?,?,?,?,?,?,?)""",
+            (
+                pallet_id, f"MANUAL-BC-{product_id}", product_id, warehouse["id"],
+                unit, location, timestamp, manual_quantity,
+            ),
+        )
 
 
 def validate_order(db, payload: dict) -> tuple[tuple, list[tuple]]:

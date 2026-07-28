@@ -5,6 +5,7 @@ __pycache__/
 .venv/
 venv/
 instance/
+*.db
 .coverage
 htmlcov/
 .idea/

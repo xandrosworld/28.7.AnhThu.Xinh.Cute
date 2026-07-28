@@ -21,7 +21,7 @@
           <span>▣</span> Hàng hóa
         </a>
         <a class="nav-item {{ 'active' if page.startswith('order') or page == 'inspection' else '' }}" href="{{ url_for('page_5') }}">
-          <span>⇥</span> Quản lý xuất kho
+          <span>⇥</span> Phiếu xuất cũ (chỉ đọc)
         </a>
         <a class="nav-item {{ 'active' if page == 'history' else '' }}" href="{{ url_for('page_10') }}">
           <span>◷</span> Lịch sử xuất kho
@@ -48,6 +48,7 @@
           <input id="global-query" type="search" placeholder="Tìm SKU, tên hàng hoặc mã phiếu..." autocomplete="off">
         </form>
         <div class="top-actions">
+          <button class="btn" id="logout-button" type="button">Đăng xuất</button>
           <span class="system-status"><i></i> Hệ thống hoạt động</span>
           <span class="user-chip"><span class="avatar small">LT</span><span><b>Lê Thảo</b><small>Nhân viên kho</small></span></span>
         </div>
