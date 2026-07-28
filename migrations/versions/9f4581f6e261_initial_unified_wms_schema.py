@@ -138,9 +138,9 @@ def upgrade():
     sa.CheckConstraint("status IN ('active','inactive')", name=op.f('ck_inventory_valid_status')),
     sa.CheckConstraint('min_quantity >= 0', name=op.f('ck_inventory_minimum_nonnegative')),
     sa.CheckConstraint('quantity >= 0', name=op.f('ck_inventory_quantity_nonnegative')),
-    sa.ForeignKeyConstraint(['category_id'], ['categories.id'], name=op.f('fk_inventory_category_id_categories'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['category_id'], ['categories.id'], name=op.f('fk_inventory_category_id_categories')),
     sa.ForeignKeyConstraint(['unit_id'], ['units.id'], name=op.f('fk_inventory_unit_id_units')),
-    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_inventory_warehouse_id_warehouses'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_inventory_warehouse_id_warehouses')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_inventory')),
     sa.UniqueConstraint('sku', name=op.f('uq_inventory_sku'))
     )
@@ -203,8 +203,8 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.CheckConstraint('new_quantity >= 0', name=op.f('ck_inventory_adjustments_new_nonnegative')),
     sa.CheckConstraint('old_quantity >= 0', name=op.f('ck_inventory_adjustments_old_nonnegative')),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_inventory_adjustments_created_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_inventory_adjustments_inventory_id_inventory'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_inventory_adjustments_created_by_users')),
+    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_inventory_adjustments_inventory_id_inventory')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_inventory_adjustments'))
     )
     with op.batch_alter_table('inventory_adjustments', schema=None) as batch_op:
@@ -226,8 +226,8 @@ def upgrade():
     sa.Column('status', sa.String(length=16), server_default='active', nullable=False),
     sa.CheckConstraint("status IN ('active','depleted','quarantined')", name=op.f('ck_inventory_lots_valid_status')),
     sa.CheckConstraint('quantity >= 0', name=op.f('ck_inventory_lots_quantity_nonnegative')),
-    sa.ForeignKeyConstraint(['product_id'], ['inventory.id'], name=op.f('fk_inventory_lots_product_id_inventory'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_inventory_lots_warehouse_id_warehouses'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['product_id'], ['inventory.id'], name=op.f('fk_inventory_lots_product_id_inventory')),
+    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_inventory_lots_warehouse_id_warehouses')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_inventory_lots')),
     sa.UniqueConstraint('pallet_id', name='uq_inventory_lots_pallet_id')
     )
@@ -258,11 +258,11 @@ def upgrade():
     sa.CheckConstraint("(receipt_type='inbound' AND supplier_id IS NOT NULL AND customer_id IS NULL) OR (receipt_type='outbound' AND customer_id IS NOT NULL AND supplier_id IS NULL)", name=op.f('ck_receipts_partner_matches_type')),
     sa.CheckConstraint("receipt_type IN ('inbound','outbound')", name=op.f('ck_receipts_valid_type')),
     sa.CheckConstraint("status IN ('draft','pending','picking','completed','rejected','cancelled')", name=op.f('ck_receipts_valid_status')),
-    sa.ForeignKeyConstraint(['confirmed_by'], ['users.id'], name=op.f('fk_receipts_confirmed_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_receipts_created_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], name=op.f('fk_receipts_customer_id_customers'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['supplier_id'], ['suppliers.id'], name=op.f('fk_receipts_supplier_id_suppliers'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_receipts_warehouse_id_warehouses'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['confirmed_by'], ['users.id'], name=op.f('fk_receipts_confirmed_by_users')),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_receipts_created_by_users')),
+    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], name=op.f('fk_receipts_customer_id_customers')),
+    sa.ForeignKeyConstraint(['supplier_id'], ['suppliers.id'], name=op.f('fk_receipts_supplier_id_suppliers')),
+    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_receipts_warehouse_id_warehouses')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_receipts')),
     sa.UniqueConstraint('code', name=op.f('uq_receipts_code'))
     )
@@ -282,9 +282,9 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.CheckConstraint("status IN ('draft','completed','cancelled')", name=op.f('ck_stocktakes_valid_status')),
-    sa.ForeignKeyConstraint(['confirmed_by'], ['users.id'], name=op.f('fk_stocktakes_confirmed_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_stocktakes_created_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_stocktakes_warehouse_id_warehouses'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['confirmed_by'], ['users.id'], name=op.f('fk_stocktakes_confirmed_by_users')),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_stocktakes_created_by_users')),
+    sa.ForeignKeyConstraint(['warehouse_id'], ['warehouses.id'], name=op.f('fk_stocktakes_warehouse_id_warehouses')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_stocktakes')),
     sa.UniqueConstraint('code', name=op.f('uq_stocktakes_code'))
     )
@@ -301,7 +301,7 @@ def upgrade():
     sa.Column('issue_note', sa.String(length=500), server_default='', nullable=False),
     sa.CheckConstraint('accepted_quantity >= 0', name=op.f('ck_receipt_items_accepted_nonnegative')),
     sa.CheckConstraint('quantity > 0', name=op.f('ck_receipt_items_quantity_positive')),
-    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_receipt_items_inventory_id_inventory'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_receipt_items_inventory_id_inventory')),
     sa.ForeignKeyConstraint(['receipt_id'], ['receipts.id'], name=op.f('fk_receipt_items_receipt_id_receipts'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_receipt_items')),
     sa.UniqueConstraint('receipt_id', 'inventory_id', 'pallet_id', name='uq_receipt_items_receipt_product_pallet')
@@ -323,8 +323,8 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.CheckConstraint("movement_type IN ('inbound','outbound','stocktake','adjustment')", name=op.f('ck_stock_movements_valid_type')),
     sa.CheckConstraint('balance_after >= 0', name=op.f('ck_stock_movements_balance_nonnegative')),
-    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_stock_movements_created_by_users'), ondelete='RESTRICT'),
-    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_stock_movements_inventory_id_inventory'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['created_by'], ['users.id'], name=op.f('fk_stock_movements_created_by_users')),
+    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_stock_movements_inventory_id_inventory')),
     sa.ForeignKeyConstraint(['lot_id'], ['inventory_lots.id'], name=op.f('fk_stock_movements_lot_id_inventory_lots')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_stock_movements')),
     sa.UniqueConstraint('movement_type', 'reference_code', 'inventory_id', 'pallet_id', name='uq_stock_movements_idempotency')
@@ -341,7 +341,7 @@ def upgrade():
     sa.Column('reason', sa.String(length=500), server_default='', nullable=False),
     sa.CheckConstraint('counted_quantity >= 0', name=op.f('ck_stocktake_items_counted_nonnegative')),
     sa.CheckConstraint('system_quantity >= 0', name=op.f('ck_stocktake_items_system_nonnegative')),
-    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_stocktake_items_inventory_id_inventory'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['inventory_id'], ['inventory.id'], name=op.f('fk_stocktake_items_inventory_id_inventory')),
     sa.ForeignKeyConstraint(['stocktake_id'], ['stocktakes.id'], name=op.f('fk_stocktake_items_stocktake_id_stocktakes'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_stocktake_items')),
     sa.UniqueConstraint('stocktake_id', 'inventory_id', name='uq_stocktake_items_stocktake_product')
@@ -370,7 +370,7 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.CheckConstraint('quantity > 0', name=op.f('ck_outbound_allocations_quantity_positive')),
-    sa.ForeignKeyConstraint(['lot_id'], ['inventory_lots.id'], name=op.f('fk_outbound_allocations_lot_id_inventory_lots'), ondelete='RESTRICT'),
+    sa.ForeignKeyConstraint(['lot_id'], ['inventory_lots.id'], name=op.f('fk_outbound_allocations_lot_id_inventory_lots')),
     sa.ForeignKeyConstraint(['receipt_item_id'], ['receipt_items.id'], name=op.f('fk_outbound_allocations_receipt_item_id_receipt_items'), ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_outbound_allocations')),
     sa.UniqueConstraint('receipt_item_id', 'lot_id', name='uq_outbound_allocations_line_lot')

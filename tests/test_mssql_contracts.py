@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from sqlalchemy import select
 from sqlalchemy.dialects import mssql
+from sqlalchemy.schema import CreateTable
 
 from app.db import _mssql_insert_with_identity, _mssql_sql
 from app.models import InventoryLot, Product, Receipt
@@ -59,3 +62,17 @@ def test_report_dates_are_validated_before_database_cast(client, admin_login):
         payload = response.get_json()
         assert payload["error"]["code"] == "validation_error"
         assert payload["error"]["fields"]
+
+
+def test_mssql_uses_default_no_action_instead_of_unsupported_restrict():
+    product_ddl = str(CreateTable(Product.__table__).compile(dialect=mssql.dialect()))
+    normalized = " ".join(product_ddl.upper().split())
+    assert "FOREIGN KEY(CATEGORY_ID) REFERENCES CATEGORIES (ID)" in normalized
+    assert "FOREIGN KEY(WAREHOUSE_ID) REFERENCES WAREHOUSES (ID)" in normalized
+    assert "ON DELETE RESTRICT" not in normalized
+
+    migration_source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in Path("migrations/versions").glob("*.py")
+    ).upper()
+    assert "RESTRICT" not in migration_source

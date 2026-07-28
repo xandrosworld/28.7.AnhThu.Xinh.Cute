@@ -150,10 +150,10 @@ class Product(TimestampMixin, ActiveMixin, db.Model):
     barcode = db.Column(db.String(100), nullable=True)
     name = db.Column(db.String(200), nullable=False)
     category_id = db.Column(
-        db.Integer, db.ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False, index=True
+        db.Integer, db.ForeignKey("categories.id"), nullable=False, index=True
     )
     warehouse_id = db.Column(
-        db.Integer, db.ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False, index=True
+        db.Integer, db.ForeignKey("warehouses.id"), nullable=False, index=True
     )
     unit = db.Column(db.String(40), nullable=False)
     unit_id = db.Column(db.Integer, db.ForeignKey("units.id"), nullable=True, index=True)
@@ -180,10 +180,10 @@ class InventoryLot(TimestampMixin, ActiveMixin, db.Model):
     )
     id = db.Column(db.Integer, primary_key=True)
     product_id = db.Column(
-        db.Integer, db.ForeignKey("inventory.id", ondelete="RESTRICT"), nullable=False
+        db.Integer, db.ForeignKey("inventory.id"), nullable=False
     )
     warehouse_id = db.Column(
-        db.Integer, db.ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+        db.Integer, db.ForeignKey("warehouses.id"), nullable=False
     )
     unit = db.Column(db.String(40), nullable=False)
     pallet_id = db.Column(db.String(100), nullable=False)
@@ -216,22 +216,22 @@ class Receipt(TimestampMixin, db.Model):
     receipt_type = db.Column(db.String(16), nullable=False)
     partner_id = db.Column(db.Integer, nullable=False, index=True)
     customer_id = db.Column(
-        db.Integer, db.ForeignKey("customers.id", ondelete="RESTRICT"), nullable=True
+        db.Integer, db.ForeignKey("customers.id"), nullable=True
     )
     supplier_id = db.Column(
-        db.Integer, db.ForeignKey("suppliers.id", ondelete="RESTRICT"), nullable=True
+        db.Integer, db.ForeignKey("suppliers.id"), nullable=True
     )
     partner_name = db.Column(db.String(200), nullable=False)
     warehouse_id = db.Column(
-        db.Integer, db.ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+        db.Integer, db.ForeignKey("warehouses.id"), nullable=False
     )
     request_email = db.Column(db.String(255), nullable=False, default="", server_default="")
     container_no = db.Column(db.String(100), nullable=False, default="", server_default="")
     seal_no = db.Column(db.String(100), nullable=False, default="", server_default="")
     status = db.Column(db.String(16), nullable=False, default="draft")
     note = db.Column(db.String(1000), nullable=False, default="", server_default="")
-    created_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"))
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     confirmed_at = db.Column(db.DateTime)
 
 
@@ -250,7 +250,7 @@ class ReceiptItem(db.Model):
         db.Integer, db.ForeignKey("receipts.id", ondelete="CASCADE"), nullable=False, index=True
     )
     inventory_id = db.Column(
-        db.Integer, db.ForeignKey("inventory.id", ondelete="RESTRICT"), nullable=False
+        db.Integer, db.ForeignKey("inventory.id"), nullable=False
     )
     quantity = db.Column(db.Numeric(18, 3), nullable=False)
     accepted_quantity = db.Column(db.Numeric(18, 3), nullable=False, default=0, server_default="0")
@@ -305,7 +305,7 @@ class OutboundAllocation(TimestampMixin, db.Model):
     receipt_item_id = db.Column(
         db.Integer, db.ForeignKey("receipt_items.id", ondelete="CASCADE"), nullable=False
     )
-    lot_id = db.Column(db.Integer, db.ForeignKey("inventory_lots.id", ondelete="RESTRICT"), nullable=False)
+    lot_id = db.Column(db.Integer, db.ForeignKey("inventory_lots.id"), nullable=False)
     quantity = db.Column(db.Numeric(18, 3), nullable=False)
 
 
@@ -321,7 +321,7 @@ class StockMovement(db.Model):
         Index("ix_movement_created", "created_at"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id", ondelete="RESTRICT"), nullable=False)
+    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False)
     lot_id = db.Column(db.Integer, db.ForeignKey("inventory_lots.id"), nullable=True)
     movement_type = db.Column(db.String(20), nullable=False)
     reference_code = db.Column(db.String(40), nullable=False)
@@ -329,7 +329,7 @@ class StockMovement(db.Model):
     balance_after = db.Column(db.Numeric(18, 3), nullable=False)
     pallet_id = db.Column(db.String(100), nullable=False, default="", server_default="")
     reason = db.Column(db.String(500), nullable=False, default="", server_default="")
-    created_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(
         db.DateTime, nullable=False, default=utcnow,
         server_default=db.func.current_timestamp(),
@@ -343,11 +343,11 @@ class Stocktake(TimestampMixin, db.Model):
     )
     id = db.Column(db.Integer, primary_key=True)
     code = db.Column(db.String(40), nullable=False, unique=True)
-    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False)
+    warehouse_id = db.Column(db.Integer, db.ForeignKey("warehouses.id"), nullable=False)
     status = db.Column(db.String(16), nullable=False, default="draft", server_default="draft")
     note = db.Column(db.String(1000), nullable=False, default="", server_default="")
-    created_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"))
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    confirmed_by = db.Column(db.Integer, db.ForeignKey("users.id"))
     confirmed_at = db.Column(db.DateTime)
 
 
@@ -363,7 +363,7 @@ class StocktakeItem(db.Model):
     )
     id = db.Column(db.Integer, primary_key=True)
     stocktake_id = db.Column(db.Integer, db.ForeignKey("stocktakes.id", ondelete="CASCADE"), nullable=False)
-    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id", ondelete="RESTRICT"), nullable=False)
+    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False)
     system_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     counted_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     reason = db.Column(db.String(500), nullable=False, default="", server_default="")
@@ -376,13 +376,13 @@ class InventoryAdjustment(db.Model):
         CheckConstraint("new_quantity >= 0", name="new_nonnegative"),
     )
     id = db.Column(db.Integer, primary_key=True)
-    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id", ondelete="RESTRICT"), nullable=False, index=True)
+    inventory_id = db.Column(db.Integer, db.ForeignKey("inventory.id"), nullable=False, index=True)
     old_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     new_quantity = db.Column(db.Numeric(18, 3), nullable=False)
     difference = db.Column(db.Numeric(18, 3), nullable=False)
     reason = db.Column(db.String(200), nullable=False)
     note = db.Column(db.String(500), nullable=False, default="", server_default="")
-    created_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(
         db.DateTime, nullable=False, default=utcnow, index=True,
         server_default=db.func.current_timestamp(),

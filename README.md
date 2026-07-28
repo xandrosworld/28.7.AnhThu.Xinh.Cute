@@ -178,7 +178,7 @@ python -m pytest --cov=app --cov-report=term-missing -q
 ```
 
 Kết quả xác minh cục bộ cuối trên Python 3.12/SQLite:
-**64 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
+**65 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
 toàn package `app` đạt 87,48%**. CI đặt ngưỡng 85% cho toàn package. Không tính
 checklist trình duyệt thủ công vào số test tự động.
 

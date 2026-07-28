@@ -2,7 +2,7 @@
 
 Usage after verification:
     python docs/generate_completion_report.py \
-        --test-result "64 passed, 1 SQL Server test skipped locally" \
+        --test-result "65 passed, 1 SQL Server test skipped locally" \
         --coverage "87.48%"
 
 The result is always written under ``docs/``.  Test results are required so a
@@ -48,7 +48,7 @@ def parse_args():
     parser.add_argument(
         "--test-result",
         required=True,
-        help='Kết quả pytest thật, ví dụ "64 passed"',
+        help='Kết quả pytest thật, ví dụ "65 passed"',
     )
     parser.add_argument(
         "--coverage",
