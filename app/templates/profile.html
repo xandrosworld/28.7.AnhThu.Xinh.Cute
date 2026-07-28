@@ -7,7 +7,7 @@
   <article class="profile-card">
     <div class="profile-avatar">{{ g.user['avatar_initials'] }}</div>
     <h2>{{ g.user['full_name'] }}</h2><p>@{{ g.user['username'] }}</p>
-    <span class="badge info">{{ {'admin':'Quản trị viên','manager':'Quản lý kho','staff':'Nhân viên'}[g.user['role']] }}</span>
+    <span class="badge info">{{ {'admin':'Quản trị viên','cs':'Chăm sóc khách hàng','warehouse':'Nhân viên kho','manager':'Chăm sóc khách hàng','staff':'Nhân viên kho'}[g.user['role']] }}</span>
     <div class="profile-facts"><div><small>TRẠNG THÁI</small><strong><span class="health-dot"></span> Đang hoạt động</strong></div><div><small>THÀNH VIÊN TỪ</small><strong>{{ g.user['created_at'][:10] }}</strong></div></div>
   </article>
   <div class="profile-forms">

@@ -3,11 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1d4ed8">
+  <meta name="theme-color" content="#123c69">
   <title>{% block title %}DNP WMS{% endblock %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body data-page="{{ page|default('') }}" data-role="{{ g.user['role'] if g.user else '' }}">
@@ -22,12 +19,37 @@
         <a class="nav-item {{ 'active' if page == 'dashboard' }}" href="{{ url_for('views.dashboard') }}">
           <span aria-hidden="true">⌂</span> Tổng quan
         </a>
-        <p class="nav-label">Quản lý kho</p>
+        <p class="nav-label">Vận hành kho</p>
+        <a class="nav-item {{ 'active' if page == 'inbound' }}" href="{{ url_for('views.inbound_receipts') }}">
+          <span aria-hidden="true">↘</span> Nhập kho
+        </a>
+        <a class="nav-item {{ 'active' if page == 'outbound' }}" href="{{ url_for('views.outbound_receipts') }}">
+          <span aria-hidden="true">↗</span> Xuất kho
+        </a>
         <a class="nav-item {{ 'active' if page == 'inventory' }}" href="{{ url_for('views.inventory') }}">
           <span aria-hidden="true">▦</span> Tồn kho
         </a>
+        <a class="nav-item {{ 'active' if page == 'stocktakes' }}" href="{{ url_for('views.stocktakes') }}">
+          <span aria-hidden="true">✓</span> Kiểm kê
+        </a>
+        <a class="nav-item {{ 'active' if page == 'reports' }}" href="{{ url_for('views.reports') }}">
+          <span aria-hidden="true">▥</span> Báo cáo
+        </a>
+        <p class="nav-label">Dữ liệu nền</p>
+        <a class="nav-item {{ 'active' if page == 'products' }}" href="{{ url_for('views.products') }}">
+          <span aria-hidden="true">◈</span> Hàng hóa
+        </a>
         <a class="nav-item {{ 'active' if page == 'categories' }}" href="{{ url_for('views.categories') }}">
           <span aria-hidden="true">◇</span> Danh mục
+        </a>
+        <a class="nav-item {{ 'active' if page == 'customers' }}" href="{{ url_for('views.customers') }}">
+          <span aria-hidden="true">♙</span> Khách hàng
+        </a>
+        <a class="nav-item {{ 'active' if page == 'suppliers' }}" href="{{ url_for('views.suppliers') }}">
+          <span aria-hidden="true">♧</span> Nhà cung cấp
+        </a>
+        <a class="nav-item {{ 'active' if page == 'warehouses' }}" href="{{ url_for('views.warehouses') }}">
+          <span aria-hidden="true">▣</span> Kho hàng
         </a>
         {% if g.user['role'] == 'admin' %}
           <p class="nav-label">Quản trị</p>
@@ -41,7 +63,7 @@
       </nav>
       <div class="sidebar-footer">
         <span class="health-dot" aria-hidden="true"></span>
-        <span><strong>Hệ thống hoạt động</strong><small>SQLite · Phiên bản 1.0</small></span>
+        <span><strong>Hệ thống hoạt động</strong><small>DNP WMS · Phiên bản 2.0</small></span>
       </div>
     </aside>
 
@@ -55,13 +77,14 @@
         <div class="topbar-actions">
           <a class="user-chip" href="{{ url_for('views.profile') }}">
             <span class="avatar">{{ g.user['avatar_initials'] }}</span>
-            <span class="user-copy"><strong>{{ g.user['full_name'] }}</strong><small>{{ {'admin':'Quản trị viên','manager':'Quản lý kho','staff':'Nhân viên'}[g.user['role']] }}</small></span>
+            <span class="user-copy"><strong>{{ g.user['full_name'] }}</strong><small>{{ {'admin':'Quản trị viên','cs':'Chăm sóc khách hàng','warehouse':'Nhân viên kho','manager':'Chăm sóc khách hàng','staff':'Nhân viên kho'}[g.user['role']] }}</small></span>
           </a>
           <button type="button" class="icon-button" id="logout-button" title="Đăng xuất" aria-label="Đăng xuất">↪</button>
         </div>
       </header>
 
       <main class="main-content" id="main-content" tabindex="-1">
+        <div class="offline-banner hidden" id="offline-banner" role="status">Mất kết nối mạng. Một số thao tác tạm thời không khả dụng.</div>
         {% block content %}{% endblock %}
       </main>
     </div>

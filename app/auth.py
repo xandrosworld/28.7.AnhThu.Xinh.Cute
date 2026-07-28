@@ -10,7 +10,18 @@ bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
 
 def _json_error(message, status=400, errors=None):
-    payload = {"ok": False, "message": message}
+    payload = {
+        "ok": False,
+        "message": message,
+        "error": {
+            "code": {
+                400: "bad_request", 401: "unauthorized", 403: "forbidden",
+                422: "validation_error",
+            }.get(status, "request_failed"),
+            "message": message,
+            "fields": errors or {},
+        },
+    }
     if errors:
         payload["errors"] = errors
     return jsonify(payload), status
@@ -80,7 +91,8 @@ def csrf_required(view):
 
 @bp.post("/login")
 def login():
-    data = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    data = payload if isinstance(payload, dict) else {}
     username = str(data.get("username", "")).strip()
     password = str(data.get("password", ""))
     errors = {}

@@ -1,5 +1,6 @@
 import json
 import sqlite3
+import sys
 
 import click
 from flask import current_app, g
@@ -94,6 +95,26 @@ def seed_database(database):
             "locked",
             "TH",
         ),
+        (
+            "cs",
+            generate_password_hash("Cs@123456"),
+            "Nguyễn Minh Châu",
+            "cs@dnp.vn",
+            "0904 111 222",
+            "cs",
+            "active",
+            "MC",
+        ),
+        (
+            "warehouse",
+            generate_password_hash("Kho@12345"),
+            "Phạm Quốc Bảo",
+            "warehouse@dnp.vn",
+            "0905 333 444",
+            "warehouse",
+            "active",
+            "QB",
+        ),
     ]
     database.executemany(
         """
@@ -159,6 +180,62 @@ def seed_database(database):
             for sku, name, category, warehouse, unit, qty, minimum, location in inventory
         ],
     )
+    database.executemany(
+        """
+        INSERT INTO customers (code, name, email, phone, contract_emails, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("KH001", "Công ty Minh Phát", "kho@minhphat.vn", "028 3812 3456", "kho@minhphat.vn,dieuphoi@minhphat.vn", "active"),
+            ("KH002", "Xây dựng An Khang", "vattu@ankhang.vn", "024 3765 4321", "vattu@ankhang.vn", "active"),
+            ("KH003", "Nội thất Thành Công", "muahang@thanhcong.vn", "0908 112 233", "muahang@thanhcong.vn", "active"),
+        ],
+    )
+    database.executemany(
+        """
+        INSERT INTO suppliers (code, name, email, phone, address, status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        [
+            ("NCC001", "Thép Việt Nam", "sales@thepvietnam.vn", "028 3866 7788", "TP.HCM", "active"),
+            ("NCC002", "Vật liệu Đông Á", "donhang@dong-a.vn", "024 3555 6677", "Hà Nội", "active"),
+            ("NCC003", "Thiết bị Hoàng Gia", "cs@hoanggia.vn", "0236 399 8899", "Đà Nẵng", "active"),
+        ],
+    )
+    database.execute(
+        """
+        INSERT INTO receipts
+          (code, receipt_type, partner_id, partner_name, warehouse_id, container_no,
+           seal_no, status, note, created_by)
+        VALUES ('PN-2026-001', 'inbound', 1, 'Thép Việt Nam', ?, 'DNPX260701',
+                'SEAL-8801', 'pending', 'Chờ nhân viên kho kiểm nhận', 1)
+        """,
+        (warehouse_ids["HN"],),
+    )
+    database.execute(
+        """
+        INSERT INTO receipt_items
+          (receipt_id, inventory_id, quantity, accepted_quantity, pallet_id, barcode)
+        VALUES (1, 1, 120, 120, 'PLT-HN-0001', '8938501000012')
+        """
+    )
+    database.execute(
+        """
+        INSERT INTO receipts
+          (code, receipt_type, partner_id, partner_name, warehouse_id, request_email,
+           status, note, created_by)
+        VALUES ('PX-2026-001', 'outbound', 1, 'Công ty Minh Phát', ?,
+                'kho@minhphat.vn', 'picking', 'Ưu tiên giao ca sáng', 1)
+        """,
+        (warehouse_ids["HN"],),
+    )
+    database.execute(
+        """
+        INSERT INTO receipt_items
+          (receipt_id, inventory_id, quantity, accepted_quantity, pallet_id, barcode)
+        VALUES (2, 1, 30, 30, 'PLT-HN-0001', '8938501000012')
+        """
+    )
 
 
 @click.command("init-db")
@@ -166,7 +243,11 @@ def seed_database(database):
 def init_db_command():
     """Khởi tạo lại cơ sở dữ liệu và dữ liệu demo."""
     init_database()
-    click.echo("Đã khởi tạo cơ sở dữ liệu DNP WMS.")
+    message = "Đã khởi tạo cơ sở dữ liệu DNP WMS."
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    if encoding.lower().replace("-", "") not in {"utf8", "utf8sig"}:
+        message = "Da khoi tao co so du lieu DNP WMS."
+    click.echo(message)
 
 
 def init_app(app):
