@@ -15,6 +15,25 @@ branch_labels = None
 depends_on = None
 
 
+def _set_nullable(table_name, column_name, index_name, nullable):
+    """Change nullability without leaving SQL Server indexes in the way."""
+    if context.get_context().dialect.name == "mssql":
+        op.drop_index(index_name, table_name=table_name)
+        op.alter_column(
+            table_name,
+            column_name,
+            existing_type=sa.Integer(),
+            nullable=nullable,
+        )
+        op.create_index(index_name, table_name, [column_name], unique=False)
+        return
+
+    with op.batch_alter_table(table_name) as batch_op:
+        batch_op.alter_column(
+            column_name, existing_type=sa.Integer(), nullable=nullable
+        )
+
+
 def upgrade():
     with op.batch_alter_table("roles") as batch_op:
         batch_op.add_column(
@@ -36,14 +55,10 @@ def upgrade():
     if context.is_offline_mode():
         # Static SQL describes schema evolution only. Runtime backfill below is
         # intentionally online because it must inspect legacy free-text values.
-        with op.batch_alter_table("users") as batch_op:
-            batch_op.alter_column(
-                "role_id", existing_type=sa.Integer(), nullable=False
-            )
-        with op.batch_alter_table("inventory") as batch_op:
-            batch_op.alter_column(
-                "unit_id", existing_type=sa.Integer(), nullable=False
-            )
+        _set_nullable("users", "role_id", op.f("ix_users_role_id"), False)
+        _set_nullable(
+            "inventory", "unit_id", op.f("ix_inventory_unit_id"), False
+        )
         return
 
     bind = op.get_bind()
@@ -128,25 +143,13 @@ def upgrade():
         )
     )
 
-    with op.batch_alter_table("users") as batch_op:
-        batch_op.alter_column(
-            "role_id", existing_type=sa.Integer(), nullable=False
-        )
-    with op.batch_alter_table("inventory") as batch_op:
-        batch_op.alter_column(
-            "unit_id", existing_type=sa.Integer(), nullable=False
-        )
+    _set_nullable("users", "role_id", op.f("ix_users_role_id"), False)
+    _set_nullable("inventory", "unit_id", op.f("ix_inventory_unit_id"), False)
 
 
 def downgrade():
-    with op.batch_alter_table("inventory") as batch_op:
-        batch_op.alter_column(
-            "unit_id", existing_type=sa.Integer(), nullable=True
-        )
-    with op.batch_alter_table("users") as batch_op:
-        batch_op.alter_column(
-            "role_id", existing_type=sa.Integer(), nullable=True
-        )
+    _set_nullable("inventory", "unit_id", op.f("ix_inventory_unit_id"), True)
+    _set_nullable("users", "role_id", op.f("ix_users_role_id"), True)
     with op.batch_alter_table("roles") as batch_op:
         batch_op.drop_constraint(op.f("ck_roles_valid_status"), type_="check")
         batch_op.drop_column("status")

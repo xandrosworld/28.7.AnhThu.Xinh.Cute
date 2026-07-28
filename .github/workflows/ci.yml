@@ -36,7 +36,7 @@ jobs:
       - name: Reject placeholders and high-confidence secrets
         shell: bash
         run: |
-          if git grep -nE 'href=["'"'"']#|action=["'"'"']#|TODO|FIXME' -- app; then
+          if git grep -niE 'href[[:space:]]*=[[:space:]]*["'"'"']#["'"'"']|action[[:space:]]*=[[:space:]]*["'"'"']#["'"'"']|TODO|FIXME' -- app; then
             echo "Placeholder link or unfinished marker detected."
             exit 1
           fi
