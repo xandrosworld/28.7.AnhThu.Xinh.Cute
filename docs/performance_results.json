@@ -1,0 +1,154 @@
+{
+  "generated_at_utc": "2026-07-28T08:46:45.894631+00:00",
+  "environment": {
+    "python": "3.12.10",
+    "python_implementation": "CPython",
+    "sqlite": "3.49.1",
+    "flask": "3.1.1",
+    "sqlalchemy": "2.0.49",
+    "platform": "Windows-11-10.0.22621-SP0",
+    "processor": "Intel64 Family 6 Model 154 Stepping 4, GenuineIntel",
+    "cpu_count": 12
+  },
+  "dataset": {
+    "products": 1012,
+    "benchmark_products": 1000,
+    "lots": 5010,
+    "movements": 5000
+  },
+  "database_bytes": 2756608,
+  "seed_seconds": 0.073549,
+  "warmups": 2,
+  "iterations": 7,
+  "threshold_seconds": 5.0,
+  "measurement_scope": "Flask test client; includes routing, authentication, SQL, serialization and response construction; excludes network latency",
+  "results": [
+    {
+      "name": "dashboard",
+      "path": "/api/dashboard",
+      "samples_seconds": [
+        0.001902,
+        0.001874,
+        0.002189,
+        0.001951,
+        0.001998,
+        0.001909,
+        0.001882
+      ],
+      "min_seconds": 0.001874,
+      "median_seconds": 0.001909,
+      "p95_seconds": 0.002189,
+      "max_seconds": 0.002189,
+      "response_bytes": 1304
+    },
+    {
+      "name": "inventory_page",
+      "path": "/api/inventory?page=1&per_page=50",
+      "samples_seconds": [
+        0.004181,
+        0.004175,
+        0.004058,
+        0.004044,
+        0.004204,
+        0.004334,
+        0.004218
+      ],
+      "min_seconds": 0.004044,
+      "median_seconds": 0.004181,
+      "p95_seconds": 0.004334,
+      "max_seconds": 0.004334,
+      "response_bytes": 51075
+    },
+    {
+      "name": "inventory_search",
+      "path": "/api/inventory?search=BENCH-SKU-000999&page=1&per_page=50",
+      "samples_seconds": [
+        0.005449,
+        0.005797,
+        0.005467,
+        0.005337,
+        0.005192,
+        0.005271,
+        0.005153
+      ],
+      "min_seconds": 0.005153,
+      "median_seconds": 0.005337,
+      "p95_seconds": 0.005797,
+      "max_seconds": 0.005797,
+      "response_bytes": 1221
+    },
+    {
+      "name": "product_search",
+      "path": "/api/products?search=BENCH-SKU-000999",
+      "samples_seconds": [
+        0.001718,
+        0.001709,
+        0.001779,
+        0.001776,
+        0.001794,
+        0.00173,
+        0.001711
+      ],
+      "min_seconds": 0.001709,
+      "median_seconds": 0.00173,
+      "p95_seconds": 0.001794,
+      "max_seconds": 0.001794,
+      "response_bytes": 1093
+    },
+    {
+      "name": "report_summary",
+      "path": "/api/reports/summary?from=2020-01-01&to=2030-12-31",
+      "samples_seconds": [
+        0.00496,
+        0.004621,
+        0.004932,
+        0.004765,
+        0.00457,
+        0.004046,
+        0.004192
+      ],
+      "min_seconds": 0.004046,
+      "median_seconds": 0.004621,
+      "p95_seconds": 0.00496,
+      "max_seconds": 0.00496,
+      "response_bytes": 25456
+    },
+    {
+      "name": "report_filtered",
+      "path": "/api/reports/summary?from=2020-01-01&to=2030-12-31&warehouse_id=1&product_id=1&customer_id=1",
+      "samples_seconds": [
+        0.003442,
+        0.003478,
+        0.004102,
+        0.003709,
+        0.003524,
+        0.003473,
+        0.003828
+      ],
+      "min_seconds": 0.003442,
+      "median_seconds": 0.003524,
+      "p95_seconds": 0.004102,
+      "max_seconds": 0.004102,
+      "response_bytes": 364
+    },
+    {
+      "name": "report_csv",
+      "path": "/api/reports/export.csv?from=2020-01-01&to=2030-12-31",
+      "samples_seconds": [
+        0.033466,
+        0.034758,
+        0.055413,
+        0.034248,
+        0.03329,
+        0.033662,
+        0.051903
+      ],
+      "min_seconds": 0.03329,
+      "median_seconds": 0.034248,
+      "p95_seconds": 0.055413,
+      "max_seconds": 0.055413,
+      "response_bytes": 470073
+    }
+  ],
+  "verdict": "PASS"
+}

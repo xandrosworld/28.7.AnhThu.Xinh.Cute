@@ -1,53 +1,102 @@
-# DNP Logistics WMS — Nhánh Anh_Thu
+# DNP Logistics WMS
 
-Ứng dụng quản lý kho chạy bằng **Flask + SQLite**. Dữ liệu được lưu tại server, các thao tác nghiệp vụ có xác thực phiên, phân quyền, CSRF, transaction và nhật ký truy vết.
+Hệ thống quản lý kho thống nhất của nhóm, xây dựng bằng Flask, SQLAlchemy và
+Alembic. Ứng dụng chạy ngay với SQLite để chấm/demo và hỗ trợ SQL Server 2022
+qua `DATABASE_URL`. Không cần Internet, CDN hoặc deployment để sử dụng.
+
+Repository bàn giao chính thức:
+<https://github.com/xandrosworld/28.7.AnhThu.Xinh.Cute>
 
 ## Chức năng
 
-- Dashboard và báo cáo lấy số liệu trực tiếp từ database.
-- Quản lý hàng hóa, barcode, danh mục, khách hàng, nhà cung cấp và kho.
-- Tra cứu tồn kho theo từ khóa, danh mục, kho, trạng thái; xem lịch sử và điều chỉnh tồn.
-- Phiếu nhập: lập phiếu, kiểm nhận, xác nhận nhập, hủy và cập nhật tồn kho nguyên tử.
-- Phiếu xuất: xác thực email hợp đồng, kiểm tra tồn gộp, picking list FEFO/FIFO, xác nhận xuất và hủy.
-- Kiểm kê theo snapshot; từ chối xác nhận nếu tồn kho đã thay đổi sau khi lập phiếu.
-- Quản lý người dùng, hồ sơ, mật khẩu và nhật ký hệ thống.
-- API trả lỗi JSON có cấu trúc; giao diện responsive, hỗ trợ bàn phím và máy quét barcode/camera khi trình duyệt hỗ trợ.
+- Đăng nhập, session, mật khẩu băm, CSRF, audit và phân quyền phía server cho
+  `ADMIN`, `CS`, `WAREHOUSE`.
+- Quản lý tài khoản, vai trò, đơn vị, danh mục, hàng hóa, khách hàng, email hợp
+  đồng, nhà cung cấp và kho; master đã phát sinh được ngừng hoạt động thay vì
+  xóa mất lịch sử.
+- Phiếu nhập nhiều dòng, container/seal, pallet/barcode/hạn dùng, kiểm nhận
+  accepted/rejected và xác nhận nguyên tử.
+- Phiếu xuất kiểm email hợp đồng, kiểm tồn lại khi xác nhận, picking FEFO/FIFO,
+  bỏ lô hết hạn và không cho tồn âm.
+- Tồn theo sản phẩm và lot/pallet, stock movement, kiểm kê snapshot, chống xác
+  nhận lặp và rollback toàn bộ khi một dòng lỗi.
+- Dashboard, bộ lọc, báo cáo, CSV UTF-8, trang in phiếu/picking list và
+  backup/restore SQLite.
+- Giao diện tiếng Việt responsive, hỗ trợ bàn phím, loading/empty/error state,
+  máy quét USB và `BarcodeDetector` khi trình duyệt có hỗ trợ.
 
-## Vai trò và quyền
+## Kiến trúc
 
-| Vai trò | Quyền chính |
-|---|---|
-| `admin` | Toàn bộ chức năng, người dùng và nhật ký |
-| `cs` | Dữ liệu nền, đối tác, lập/hủy phiếu nhập xuất |
-| `warehouse` | Xem vận hành, kiểm nhận, xác nhận phiếu, điều chỉnh và kiểm kê tồn |
-| `manager` | Vai trò tương thích với `cs`, đồng thời giữ quyền xác nhận/điều chỉnh cũ |
-| `staff` | Vai trò tương thích với `warehouse` cho các luồng xác nhận phiếu |
+```text
+app/
+  __init__.py       app factory, cấu hình, security/API envelope
+  models.py         mô hình SQLAlchemy và constraint
+  services.py       transaction, lot allocation, invariants
+  api.py            API và validation
+  auth.py           session, RBAC, CSRF
+  templates/        giao diện Jinja
+  static/           CSS/JavaScript nội bộ
+migrations/         Alembic revisions
+tests/              unit, API integration, database và HTTP/DOM smoke
+docs/               BR/NFR, acceptance, demo và báo cáo hoàn thiện
+```
 
-Các API ghi dữ liệu luôn kiểm tra quyền và header `X-CSRF-Token`.
+API thành công luôn có `data` và `meta`; các alias lịch sử như `items`, `item`,
+`user` vẫn được giữ để tương thích giao diện. Lỗi có dạng:
 
-## Cài đặt và chạy
+```json
+{
+  "ok": false,
+  "message": "Thông báo cho người dùng",
+  "error": {
+    "code": "validation_error",
+    "message": "Thông báo cho người dùng",
+    "fields": {"field": "Chi tiết lỗi"}
+  }
+}
+```
 
-Yêu cầu Python 3.10 trở lên. Trên PowerShell:
+## Chạy nhanh bằng SQLite
+
+Yêu cầu Python 3.10 trở lên.
+
+### PowerShell
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-$env:SECRET_KEY = "thay-bang-mot-chuoi-bi-mat-dai-va-ngau-nhien"
+Copy-Item .env.example .env
+```
+
+Mở `.env`, thay `SECRET_KEY` bằng chuỗi ngẫu nhiên dài và để
+`DATABASE_URL` trống. Dùng migration làm nguồn chuẩn:
+
+```powershell
+flask --app run.py db upgrade
+flask --app run.py seed-db
 python run.py
 ```
 
-Mở `http://127.0.0.1:5000`. Database demo được tạo tự động tại `instance/dnp_wms.sqlite` trong lần chạy đầu.
+Mở <http://127.0.0.1:5000>.
 
-Các biến mẫu nằm trong `.env.example`. Ứng dụng đọc trực tiếp biến môi trường của tiến trình; file `.env` không được tự động nạp.
+### Linux/macOS
 
-Khởi tạo lại dữ liệu demo:
-
-```powershell
-flask --app run.py init-db
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env
+flask --app run.py db upgrade
+flask --app run.py seed-db
+python run.py
 ```
 
-> Lệnh này xóa dữ liệu trong database đang cấu hình rồi tạo lại schema và dữ liệu mẫu.
+`seed-db` an toàn khi chạy lặp và không chèn trùng dữ liệu. `init-db` là lệnh
+reset dữ liệu demo phục vụ phát triển; lệnh này xóa dữ liệu đang cấu hình nên
+không dùng với dữ liệu cần giữ.
 
 ## Tài khoản demo
 
@@ -59,72 +108,129 @@ flask --app run.py init-db
 | Tương thích CS | `quanlykho` | `Kho@12345` |
 | Tương thích kho | `nhanvien` | `NV@123456` |
 
-Tài khoản `khoatam` được seed ở trạng thái khóa để kiểm thử kiểm soát truy cập.
+`khoatam / Locked@123` được seed ở trạng thái khóa để kiểm thử.
 
-## Kiểm thử và coverage
+Các mật khẩu trên chỉ dành cho dữ liệu demo. Khi dùng ngoài máy cá nhân phải
+đổi mật khẩu, đặt `SECRET_KEY` thật qua biến môi trường và dùng HTTPS.
+
+## SQL Server 2022
+
+1. Cài Microsoft ODBC Driver 18 và tạo database `dnp_wms`.
+2. Đặt `DATABASE_URL`, ví dụ:
+
+```text
+mssql+pyodbc://wms_user:<PASSWORD>@localhost:1433/dnp_wms?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
+```
+
+3. Chạy:
 
 ```powershell
-python -m pytest tests -q
+flask --app run.py db upgrade
+flask --app run.py seed-db
+python run.py
+```
+
+Không commit mật khẩu hoặc chuỗi kết nối thật. Xem thêm
+[`docs/SQL_SERVER.md`](docs/SQL_SERVER.md). GitHub Actions có job SQL Server
+2022 riêng: job này tạo database thật, chạy migration/seed rồi chạy test qua
+ODBC 18; không giả lập bằng SQLite.
+
+## Migration
+
+Sau khi thay đổi model:
+
+```powershell
+flask --app run.py db migrate -m "mo ta thay doi"
+flask --app run.py db upgrade
+```
+
+Luôn review revision sinh ra trên cả SQLite và SQL Server. Không dùng
+`db.create_all()` thay migration cho database bàn giao.
+
+## Backup và phục hồi
+
+SQLite:
+
+```powershell
+flask --app run.py backup-db --output backups\dnp-wms-20260728.sqlite
+flask --app run.py restore-db backups\dnp-wms-20260728.sqlite --yes
+```
+
+- Backup từ chối ghi đè file đã tồn tại.
+- Restore kiểm tra `PRAGMA integrity_check` trước và yêu cầu `--yes`.
+- Không commit thư mục backup vào Git.
+
+Với SQL Server, dùng `BACKUP DATABASE`/`RESTORE DATABASE` và chính sách
+transaction log của SQL Server; CLI SQLite cố ý từ chối database khác.
+
+## Kiểm thử
+
+Chạy toàn bộ:
+
+```powershell
+python -m pytest -q
+```
+
+Đo coverage đầy đủ để phân tích:
+
+```powershell
 python -m pytest --cov=app --cov-report=term-missing -q
 ```
 
-Kết quả hiện tại: **33 tests passed**, tổng statement coverage của package `app` **87%**. Lệnh coverage yêu cầu cài thêm `pytest-cov` nếu môi trường chưa có (`python -m pip install pytest-cov`).
+Kết quả xác minh cục bộ cuối trên Python 3.12/SQLite:
+**64 test đạt, 1 test cạnh tranh dành riêng cho SQL Server được skip; coverage
+toàn package `app` đạt 87,48%**. CI đặt ngưỡng 85% cho toàn package. Không tính
+checklist trình duyệt thủ công vào số test tự động.
 
-Bộ test bao phủ xác thực/session, tài khoản khóa, CSRF/RBAC, CRUD quản trị, hash mật khẩu, bộ lọc tồn, transaction/rollback, phiếu nhập xuất, email hợp đồng, kiểm nhận, kiểm tra tồn, picking, hủy/xác nhận lặp, kiểm kê, báo cáo và CLI. Review adversarial còn kiểm tra payload sai kiểu, snapshot kiểm kê cũ, trùng barcode/pallet, API không tồn tại và hợp đồng route/template/static.
+Bộ test bao phủ:
+
+- auth, tài khoản khóa, RBAC, CSRF và API error envelope;
+- CRUD/update/deactivate master, duplicate và dữ liệu đã tham chiếu;
+- draft/edit/inspect/confirm/cancel phiếu nhập;
+- email hợp đồng, FEFO/FIFO, lô hết hạn, rollback và invariant tồn;
+- stale/idempotent stocktake, dữ liệu số/ngày/JSON sai kiểu;
+- migration/seed, backup/restore và HTTP/DOM/static asset;
+- cạnh tranh xác nhận xuất trên job SQL Server thật.
+
+Workflow `.github/workflows/ci.yml` chạy SQLite trên Python 3.10/3.12 và một
+job SQL Server 2022 + ODBC 18. Test đồng thời chỉ được chuyển từ skip sang chạy
+trong job SQL Server thật. Dự án không có job deploy.
 
 ## API chính
 
 | Nhóm | Endpoint |
 |---|---|
-| Xác thực | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` |
-| Tổng quan | `GET /api/dashboard`, `GET /api/lookups` |
-| Tồn kho | `GET /api/inventory`, `GET /api/inventory/:id`, `POST /api/inventory/:id/adjustments` |
-| Hàng hóa | `GET/POST /api/products` |
-| Danh mục | `GET/POST /api/categories`, `PUT/DELETE /api/categories/:id` |
-| Đối tác | `GET/POST /api/customers`, `GET/POST /api/suppliers` |
-| Kho | `GET /api/warehouses`, `GET /api/operations/lookups` |
-| Phiếu nhập | `GET/POST /api/inbound-receipts`, `GET /api/inbound-receipts/:id`, `POST .../:id/inspect`, `POST .../:id/confirm`, `POST .../:id/cancel` |
-| Phiếu xuất | `GET/POST /api/outbound-receipts`, `GET /api/outbound-receipts/:id`, `GET .../:id/check-stock`, `GET .../:id/picking-list`, `POST .../:id/confirm`, `POST .../:id/cancel` |
-| Kiểm kê | `GET/POST /api/stocktakes`, `POST /api/stocktakes/:id/confirm` |
-| Báo cáo | `GET /api/reports/summary`, `GET /api/reports/export.csv` |
-| Quản trị | `GET/POST /api/users`, `PUT/DELETE /api/users/:id`, `GET /api/audit-logs` |
-| Hồ sơ | `PUT /api/profile`, `PUT /api/profile/password` |
+| Auth | `POST /api/auth/login`, `POST /logout`, `GET /me` |
+| Lookup | `GET /api/roles`, `/units`, `/operations/lookups` |
+| Master | `/api/users`, `/categories`, `/products`, `/customers`, `/suppliers`, `/warehouses` |
+| Nhập | `/api/inbound-receipts`, `/:id/inspect`, `/:id/confirm`, `/:id/cancel` |
+| Xuất | `/api/outbound-receipts`, `/:id/check-stock`, `/:id/picking-list`, `/:id/confirm`, `/:id/cancel` |
+| Tồn | `/api/inventory`, `/api/stock-movements`, `/api/stocktakes`, `/api/stocktakes/:id` |
+| Báo cáo | `/api/reports/summary`, `/api/reports/export.csv` |
 
-API lỗi trả dạng:
+Các lệnh ghi cần session đúng vai trò và header `X-CSRF-Token`.
 
-```json
-{
-  "ok": false,
-  "message": "Thông báo cho người dùng",
-  "error": {
-    "code": "validation_error",
-    "message": "Thông báo cho người dùng",
-    "fields": {}
-  }
-}
-```
+## Tài liệu và nghiệm thu
 
-## Tính toàn vẹn và bảo mật
+- [Ma trận BR/NFR](docs/REQUIREMENTS_TRACEABILITY.md)
+- [Acceptance tests](docs/ACCEPTANCE_TESTS.md)
+- [Kịch bản demo 8–10 phút](docs/DEMO_GUIDE.md)
+- [Phân công và đóng góp](docs/CONTRIBUTION.md)
+- [Chiến lược kiểm thử](docs/TESTING.md)
+- [Bằng chứng hiệu năng NFR-005](docs/PERFORMANCE.md)
+- Bản báo cáo hoàn thiện:
+  `docs/49K21.1_NguyenHoangThanhTruc_Chuong3_KPI4_HoanThien.docx`
 
-- Mật khẩu được hash bằng Werkzeug `scrypt`; cookie phiên có `HttpOnly` và `SameSite=Lax`.
-- Các thao tác ghi yêu cầu token CSRF lấy từ phản hồi đăng nhập hoặc `/api/auth/me`.
-- Phiếu chỉ nhận hàng hóa thuộc đúng kho đã chọn; số xuất được cộng gộp theo hàng hóa trước khi so với tồn.
-- Xác nhận phiếu và kiểm kê dùng transaction; lỗi giữa chừng rollback toàn bộ cập nhật tồn và movement.
-- Xác nhận/hủy lặp không ghi movement lần hai; mã chứng từ, SKU, barcode và khóa dòng được bảo vệ bằng ràng buộc database.
-- API không tồn tại và lỗi ứng dụng trả JSON; response API không được cache và có security headers.
-- Khi chạy ngoài môi trường local, phải đặt `SECRET_KEY`, dùng HTTPS/reverse proxy và không commit `instance/`, `.env` hay thông tin xác thực thật.
+Playwright không được đưa vào dependency bắt buộc để tránh tải browser và gây
+flaky khi chấm offline. HTTP/DOM/static contract được test tự động; Chrome,
+Edge, Firefox, camera barcode và các kích thước 390/1024/1366 px nằm trong
+checklist nghiệm thu thủ công và phải có biên bản trước khi nộp.
 
-## Cấu trúc dự án
+## Lịch sử ba thành viên
 
-```text
-app/
-├── __init__.py          # Application factory, cấu hình, security/error handlers
-├── auth.py              # Session, CSRF và decorator phân quyền
-├── api.py               # API quản trị, tồn kho và vận hành WMS
-├── db.py                # Kết nối SQLite, seed và audit helper
-├── schema.sql           # Schema, foreign key, index và CHECK constraint
-├── static/              # CSS/JavaScript giao diện
-└── templates/           # Jinja templates
-tests/                   # 33 kiểm thử Flask API/DB
-run.py                   # Điểm chạy ứng dụng
-```
+- `Anh_Thu`: frontend, responsive và trải nghiệm người dùng.
+- `Le_Thao`: backend, database, transaction và toàn vẹn tồn.
+- `Thanh_Truc`: phân tích yêu cầu, acceptance, báo cáo và tài liệu.
+
+Ba nhánh và tác giả commit được giữ nguyên. `main` là sản phẩm tích hợp, không
+thay thế hoặc làm mất bằng chứng đóng góp của từng bạn.
