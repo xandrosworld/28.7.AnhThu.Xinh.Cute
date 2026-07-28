@@ -1,6 +1,9 @@
 const { defineConfig } = require("@playwright/test");
 
 const chromiumExecutable = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+const e2eHost = process.env.E2E_HOST || "127.0.0.1";
+const e2ePort = process.env.E2E_PORT || "5000";
+const e2eBaseURL = `http://${e2eHost}:${e2ePort}`;
 
 const viewports = [
   { name: "1366", viewport: { width: 1366, height: 768 } },
@@ -34,7 +37,7 @@ module.exports = defineConfig({
     ? [["line"], ["html", { outputFolder: "playwright-report", open: "never" }]]
     : "line",
   use: {
-    baseURL: "http://127.0.0.1:5000",
+    baseURL: e2eBaseURL,
     locale: "vi-VN",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
@@ -48,8 +51,8 @@ module.exports = defineConfig({
   ),
   webServer: {
     command: "python scripts/e2e_server.py",
-    url: "http://127.0.0.1:5000/",
-    reuseExistingServer: !process.env.CI,
+    url: `${e2eBaseURL}/`,
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });
