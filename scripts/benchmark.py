@@ -91,6 +91,12 @@ def seed_large_dataset(database_path: Path, products: int, lots: int, movements:
         unit_id = connection.execute(
             "SELECT id FROM units WHERE code='THUNG'"
         ).fetchone()[0]
+        warehouse_row = connection.execute(
+            "SELECT id FROM warehouses WHERE UPPER(code)='DN' ORDER BY id"
+        ).fetchone()
+        if warehouse_row is None:
+            raise RuntimeError("Benchmark requires the seeded Da Nang warehouse")
+        warehouse_id = warehouse_row[0]
         connection.executemany(
             """
             INSERT INTO inventory
@@ -104,10 +110,10 @@ def seed_large_dataset(database_path: Path, products: int, lots: int, movements:
                     f"BENCH-BAR-{index:06d}",
                     f"Hàng benchmark {index:06d}",
                     (index % 6) + 1,
-                    (index % 4) + 1,
+                    warehouse_id,
                     "Thùng",
                     unit_id,
-                    f"PERF-{index % 100:02d}",
+                    "",
                     "Dữ liệu tổng hợp chỉ dùng cho benchmark NFR-005",
                     timestamp,
                     timestamp,

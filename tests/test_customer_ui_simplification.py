@@ -1,3 +1,5 @@
+import sqlite3
+
 from conftest import login
 
 
@@ -100,3 +102,38 @@ def test_forms_can_create_records_without_sending_warehouse(client):
         headers=auth,
     )
     assert stocktake.status_code == 201
+
+
+def test_performance_seed_respects_single_warehouse(tmp_path):
+    from app import create_app
+    from app.db import init_database
+    from app.extensions import db as orm
+    from scripts.benchmark import seed_large_dataset
+
+    database_path = tmp_path / "benchmark-single-warehouse.sqlite"
+    app = create_app(
+        {
+            "TESTING": True,
+            "SECRET_KEY": "benchmark-regression-test",
+            "DATABASE": str(database_path),
+            "AUTO_INIT_DB": False,
+        }
+    )
+    with app.app_context():
+        init_database()
+        orm.session.remove()
+        orm.engine.dispose()
+
+    counts, _ = seed_large_dataset(
+        database_path, products=2, lots=3, movements=3
+    )
+    assert counts["benchmark_products"] == 2
+
+    with sqlite3.connect(database_path) as connection:
+        warehouse_ids = connection.execute(
+            "SELECT DISTINCT warehouse_id FROM inventory"
+        ).fetchall()
+        assert warehouse_ids == [(1,)]
+        assert connection.execute(
+            "SELECT COUNT(*) FROM inventory WHERE location<>''"
+        ).fetchone()[0] == 0
