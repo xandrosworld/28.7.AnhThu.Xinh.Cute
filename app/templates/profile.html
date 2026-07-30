@@ -2,7 +2,7 @@
 {% block title %}Hồ sơ cá nhân · DNP WMS{% endblock %}
 {% block topbar_title %}Hồ sơ cá nhân{% endblock %}
 {% block content %}
-<div class="page-heading"><div><span class="eyebrow">TÀI KHOẢN CỦA TÔI</span><h1>Thông tin cá nhân</h1><p>Cập nhật thông tin liên hệ và bảo mật tài khoản.</p></div></div>
+<div class="page-heading"><div><span class="eyebrow">TÀI KHOẢN CỦA TÔI</span><h1>Thông tin cá nhân</h1><p>Cập nhật thông tin liên hệ của tài khoản.</p></div></div>
 <section class="profile-layout">
   <article class="profile-card">
     <div class="profile-avatar">{{ g.user['avatar_initials'] }}</div>
@@ -21,17 +21,6 @@
           <div class="form-group"><label for="profile-phone">Số điện thoại</label><input id="profile-phone" name="phone" value="{{ g.user['phone'] }}"><small class="field-error" data-error-for="phone"></small></div>
         </div>
         <div class="form-actions"><button class="button primary" type="submit">Lưu thay đổi</button></div>
-      </form>
-    </article>
-    <article class="panel">
-      <div class="panel-header"><div><h2>Đổi mật khẩu</h2><p>Sử dụng ít nhất 8 ký tự, bao gồm chữ và số.</p></div></div>
-      <form id="password-form" novalidate>
-        <div class="form-group"><label for="current-password">Mật khẩu hiện tại *</label><input id="current-password" name="current_password" type="password" required autocomplete="current-password"><small class="field-error" data-error-for="current_password"></small></div>
-        <div class="form-grid">
-          <div class="form-group"><label for="new-password">Mật khẩu mới *</label><input id="new-password" name="new_password" type="password" required autocomplete="new-password"><small class="field-error" data-error-for="new_password"></small></div>
-          <div class="form-group"><label for="confirm-password">Xác nhận mật khẩu *</label><input id="confirm-password" name="confirm_password" type="password" required autocomplete="new-password"><small class="field-error" data-error-for="confirm_password"></small></div>
-        </div>
-        <div class="form-actions"><button class="button primary" type="submit">Đổi mật khẩu</button></div>
       </form>
     </article>
   </div>

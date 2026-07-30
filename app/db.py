@@ -334,11 +334,10 @@ def seed_database(database):
         categories,
     )
 
+    # Phạm vi bài toán chỉ vận hành một kho tại Đà Nẵng. Cột kho vẫn được
+    # giữ trong mô hình dữ liệu để bảo toàn tính toàn vẹn của các chứng từ.
     warehouses = [
-        ("HN", "Kho Hà Nội", "KCN Quang Minh, Mê Linh, Hà Nội", "active"),
-        ("HCM", "Kho TP.HCM", "KCN Tân Bình, TP.HCM", "active"),
         ("DN", "Kho Đà Nẵng", "KCN Hòa Khánh, Đà Nẵng", "active"),
-        ("BD", "Kho Bình Dương", "KCN Sóng Thần, Bình Dương", "active"),
     ]
     database.executemany(
         "INSERT INTO warehouses (code, name, address, status) VALUES (?, ?, ?, ?)",
@@ -352,18 +351,18 @@ def seed_database(database):
         row["code"]: row["id"] for row in database.execute("SELECT id, code FROM warehouses")
     }
     inventory = [
-        ("SKU-1001", "Thép hộp 40x40", "NVL", "HN", "Cây", 1250, 200, "A-01-01"),
-        ("SKU-1002", "Xi măng PCB40", "VTXD", "HCM", "Bao", 42, 100, "B-02-03"),
-        ("SKU-1003", "Dây điện Cadivi 2.5", "VTDIEN", "DN", "Cuộn", 0, 20, "C-01-04"),
-        ("SKU-1004", "Bu lông M12", "PK", "BD", "Hộp", 720, 100, "A-03-02"),
-        ("SKU-1005", "Màng PE bọc hàng", "DGOI", "HN", "Cuộn", 110, 30, "D-02-01"),
-        ("SKU-1006", "Máy quấn màng pallet", "TB", "HCM", "Cái", 3, 2, "E-01-01"),
-        ("SKU-1007", "Tôn lạnh 0.45mm", "NVL", "DN", "Tấm", 520, 80, "A-02-05"),
-        ("SKU-1008", "Gạch terrazzo", "VTXD", "BD", "Viên", 1450, 300, "B-01-02"),
-        ("SKU-1009", "Aptomat 2P 32A", "VTDIEN", "HN", "Cái", 18, 25, "C-03-02"),
-        ("SKU-1010", "Pallet gỗ 1.2x1.0m", "DGOI", "HCM", "Cái", 85, 20, "D-01-03"),
-        ("SKU-1011", "Ống thép D50", "NVL", "DN", "Cây", 310, 60, "A-04-01"),
-        ("SKU-1012", "Sơn nội thất trắng", "VTXD", "BD", "Thùng", 0, 15, "B-04-02"),
+        ("SKU-1001", "Thép hộp 40x40", "NVL", "DN", "Cây", 1250, 200, ""),
+        ("SKU-1002", "Xi măng PCB40", "VTXD", "DN", "Bao", 42, 100, ""),
+        ("SKU-1003", "Dây điện Cadivi 2.5", "VTDIEN", "DN", "Cuộn", 0, 20, ""),
+        ("SKU-1004", "Bu lông M12", "PK", "DN", "Hộp", 720, 100, ""),
+        ("SKU-1005", "Màng PE bọc hàng", "DGOI", "DN", "Cuộn", 110, 30, ""),
+        ("SKU-1006", "Máy quấn màng pallet", "TB", "DN", "Cái", 3, 2, ""),
+        ("SKU-1007", "Tôn lạnh 0.45mm", "NVL", "DN", "Tấm", 520, 80, ""),
+        ("SKU-1008", "Gạch terrazzo", "VTXD", "DN", "Viên", 1450, 300, ""),
+        ("SKU-1009", "Aptomat 2P 32A", "VTDIEN", "DN", "Cái", 18, 25, ""),
+        ("SKU-1010", "Pallet gỗ 1.2x1.0m", "DGOI", "DN", "Cái", 85, 20, ""),
+        ("SKU-1011", "Ống thép D50", "NVL", "DN", "Cây", 310, 60, ""),
+        ("SKU-1012", "Sơn nội thất trắng", "VTXD", "DN", "Thùng", 0, 15, ""),
     ]
     unit_ids = {
         row["name"].casefold(): row["id"]
@@ -414,13 +413,13 @@ def seed_database(database):
         VALUES ('PN-2026-001', 'inbound', 1, 1, 'Thép Việt Nam', ?, 'DNPX260701',
                 'SEAL-8801', 'pending', 'Chờ nhân viên kho kiểm nhận', 1)
         """,
-        (warehouse_ids["HN"],),
+        (warehouse_ids["DN"],),
     )
     database.execute(
         """
         INSERT INTO receipt_items
           (receipt_id, inventory_id, quantity, accepted_quantity, pallet_id, barcode)
-        VALUES (1, 1, 120, 120, 'PLT-HN-0001', '8938501000012')
+        VALUES (1, 1, 120, 120, 'PLT-DN-0001', '8938501000012')
         """
     )
     database.execute(
@@ -479,13 +478,13 @@ def seed_database(database):
         VALUES ('PX-2026-001', 'outbound', 1, 1, 'Công ty Minh Phát', ?,
                 'kho@minhphat.vn', 'picking', 'Ưu tiên giao ca sáng', 1)
         """,
-        (warehouse_ids["HN"],),
+        (warehouse_ids["DN"],),
     )
     database.execute(
         """
         INSERT INTO receipt_items
           (receipt_id, inventory_id, quantity, accepted_quantity, pallet_id, barcode)
-        VALUES (2, 1, 30, 30, 'PLT-HN-0001', '8938501000012')
+        VALUES (2, 1, 30, 30, 'PLT-DN-0001', '8938501000012')
         """
     )
 

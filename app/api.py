@@ -70,6 +70,17 @@ def to_int(value, default=None):
         return default
 
 
+def default_warehouse_id(database=None):
+    """Return the single operational warehouse used by the application UI."""
+    database = database or get_db()
+    row = database.execute(
+        """SELECT id FROM warehouses
+           WHERE status='active'
+           ORDER BY CASE WHEN UPPER(code)='DN' THEN 0 ELSE 1 END, id"""
+    ).fetchone()
+    return row["id"] if row else None
+
+
 def to_quantity(value, *, allow_zero=False):
     try:
         result = Decimal(str(value)).quantize(Decimal("0.001"))
@@ -1207,7 +1218,8 @@ def product_create():
     data = json_object()
     database = get_db()
     sku, name, unit = text(data.get("sku")).upper(), text(data.get("name")), text(data.get("unit"))
-    category_id, warehouse_id = to_int(data.get("category_id")), to_int(data.get("warehouse_id"))
+    category_id = to_int(data.get("category_id"))
+    warehouse_id = to_int(data.get("warehouse_id")) or default_warehouse_id(database)
     unit_id = to_int(data.get("unit_id"))
     if unit_id:
         unit_row = database.execute(
@@ -1247,7 +1259,7 @@ def product_create():
                 sku, text(data.get("barcode")) or None, name, category_id, warehouse_id,
                 unit, unit_id,
                 to_quantity(data.get("min_quantity", 0), allow_zero=True) or 0,
-                text(data.get("location")), text(data.get("description")),
+                "", text(data.get("description")),
                 status,
             ),
         )
@@ -1408,7 +1420,7 @@ def product_update(product_id):
                     data.get("min_quantity", current["min_quantity"]),
                     allow_zero=True,
                 ),
-                text(data.get("location", current["location"])),
+                "",
                 text(data.get("description", current["description"])),
                 status, product_id,
             ),
@@ -1645,8 +1657,10 @@ def _receipt_list(receipt_type):
 
 def _receipt_create(receipt_type):
     data = json_object()
+    database = get_db()
     code = text(data.get("code")).upper()
-    partner_id, warehouse_id = to_int(data.get("partner_id")), to_int(data.get("warehouse_id"))
+    partner_id = to_int(data.get("partner_id"))
+    warehouse_id = to_int(data.get("warehouse_id")) or default_warehouse_id(database)
     items = data.get("items") if isinstance(data.get("items"), list) else []
     status = text(data.get("status")) or "draft"
     errors = {}
@@ -1660,7 +1674,6 @@ def _receipt_create(receipt_type):
         errors["items"] = "Phiếu phải có ít nhất một dòng hàng."
     if status not in {"draft", "pending"}:
         errors["status"] = "Trạng thái phiếu không hợp lệ."
-    database = get_db()
     warehouse = database.execute(
         "SELECT id FROM warehouses WHERE id=? AND status='active'", (warehouse_id,)
     ).fetchone()
@@ -2303,7 +2316,9 @@ def stocktake_detail(stocktake_id):
 @csrf_required
 def stocktake_create():
     data = json_object()
-    code, warehouse_id = text(data.get("code")).upper(), to_int(data.get("warehouse_id"))
+    database = get_db()
+    code = text(data.get("code")).upper()
+    warehouse_id = to_int(data.get("warehouse_id")) or default_warehouse_id(database)
     items = data.get("items") if isinstance(data.get("items"), list) else []
     errors = {}
     if not code:
@@ -2314,7 +2329,6 @@ def stocktake_create():
         errors["items"] = "Cần ít nhất một hàng hóa."
     normalized = []
     product_ids = set()
-    database = get_db()
     for item in items:
         if not isinstance(item, dict):
             errors["items"] = "Dòng kiểm kê không hợp lệ."

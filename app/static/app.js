@@ -307,8 +307,8 @@
     const data = await api("/api/lookups");
     const category = $('[name="category_id"]', form);
     const warehouse = $('[name="warehouse_id"]', form);
-    data.categories.forEach((item) => category.insertAdjacentHTML("beforeend", `<option value="${item.id}">${escapeHtml(item.name)}</option>`));
-    data.warehouses.forEach((item) => warehouse.insertAdjacentHTML("beforeend", `<option value="${item.id}">${escapeHtml(item.name)}</option>`));
+    if (category) data.categories.forEach((item) => category.insertAdjacentHTML("beforeend", `<option value="${item.id}">${escapeHtml(item.name)}</option>`));
+    if (warehouse) data.warehouses.forEach((item) => warehouse.insertAdjacentHTML("beforeend", `<option value="${item.id}">${escapeHtml(item.name)}</option>`));
   }
 
   function statusBadge(item) {
@@ -328,7 +328,7 @@
         <tr>
           <td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-title">${escapeHtml(item.name)}</span><span class="cell-subtitle">${escapeHtml(item.unit)}</span></td>
           <td>${escapeHtml(item.category_name)}</td>
-          <td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span><span class="cell-subtitle">Vị trí ${escapeHtml(item.location || "—")}</span></td>
+          <td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span></td>
           <td class="number"><b>${formatNumber(item.quantity)}</b> ${escapeHtml(item.unit)}${item.available_quantity != null ? `<span class="cell-subtitle">Khả dụng: ${formatNumber(item.available_quantity)}</span>` : ""}</td>
           <td>${statusBadge(item)}</td>
           <td>${formatDateTime(item.updated_at)}</td>
@@ -383,7 +383,6 @@
         <div class="detail-grid">
           <div class="detail-field"><small>DANH MỤC</small><strong>${escapeHtml(item.category_name)}</strong></div>
           <div class="detail-field"><small>KHO</small><strong>${escapeHtml(item.warehouse_name)}</strong></div>
-          <div class="detail-field"><small>VỊ TRÍ</small><strong>${escapeHtml(item.location || "—")}</strong></div>
           <div class="detail-field"><small>TỒN KHẢ DỤNG</small><strong>${formatNumber(item.available_quantity ?? item.quantity)} ${escapeHtml(item.unit)}</strong></div>
           <div class="detail-field"><small>NGƯỠNG TỐI THIỂU</small><strong>${formatNumber(item.min_quantity)} ${escapeHtml(item.unit)}</strong></div>
           <div class="detail-field"><small>TRẠNG THÁI</small><strong>${statusBadge(item)}</strong></div>
@@ -568,6 +567,7 @@
 
   function bindProfileForm(selector, endpoint) {
     const form = $(selector);
+    if (!form) return;
     form.addEventListener("submit", async (event) => {
       event.preventDefault(); clearErrors(form);
       if (!form.reportValidity()) return;
@@ -575,7 +575,6 @@
       try {
         const result = await api(endpoint, { method: "PUT", body: JSON.stringify(formData(form)) });
         toast(result.message);
-        if (selector === "#password-form") form.reset();
         if (selector === "#profile-form") window.setTimeout(() => window.location.reload(), 700);
       } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
@@ -584,7 +583,6 @@
 
   function initProfile() {
     bindProfileForm("#profile-form", "/api/profile");
-    bindProfileForm("#password-form", "/api/profile/password");
   }
 
   async function loadAudit(targetPage = 1) {
@@ -669,9 +667,6 @@
         select.innerHTML = optionList(data.categories, "Chọn danh mục", current);
       }).catch(() => {});
     });
-    $$('[name="warehouse_id"]', document).forEach((select) => {
-      select.innerHTML = optionList(lookups.warehouses, "Chọn kho", select.value);
-    });
     $$('[name="unit_id"]', document).forEach((select) => {
       select.innerHTML = optionList(lookups.units || [], "Chọn đơn vị tính", select.value);
     });
@@ -685,7 +680,7 @@
         body.innerHTML = data.items.length ? data.items.map((item) => `<tr>
           <td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-subtitle">${escapeHtml(item.barcode || "Chưa có barcode")}</span></td>
           <td><span class="cell-title">${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.category_name)}</td>
-          <td>${escapeHtml(item.unit)}</td><td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span><span class="cell-subtitle">${escapeHtml(item.location || "Chưa xếp vị trí")}</span></td>
+          <td>${escapeHtml(item.unit)}</td><td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span></td>
           <td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td>
           <td>${["admin", "manager", "cs"].includes(role) ? `<div class="table-actions"><button class="action-button product-edit" data-id="${item.id}" type="button">Sửa</button><button class="action-button ${item.status === "active" ? "danger" : ""} product-toggle" data-id="${item.id}" type="button">${item.status === "active" ? "Ngừng" : "Kích hoạt"}</button></div>` : ""}</td></tr>`).join("")
           : '<tr><td colspan="7"><div class="empty-state">Không tìm thấy hàng hóa phù hợp.</div></td></tr>';
@@ -912,24 +907,13 @@
     let currentReceipt = null;
     let lineSerial = 0;
     form.elements.partner_id.innerHTML = optionList(type === "inbound" ? lookups.suppliers : lookups.customers, "Chọn đối tác");
-    form.elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Chọn kho");
     const addLine = (item = {}) => {
       const index = lineSerial++;
-      const warehouseId = Number(form.elements.warehouse_id.value);
-      const scopedLookups = { ...lookups, products: warehouseId ? lookups.products.filter((product) => Number(product.warehouse_id) === warehouseId) : lookups.products };
-      $("#line-body").insertAdjacentHTML("beforeend", receiptLine(scopedLookups, index, item));
+      $("#line-body").insertAdjacentHTML("beforeend", receiptLine(lookups, index, item));
       const row = $("#line-body tr:last-child");
       $(".line-remove", row).addEventListener("click", () => row.remove());
       $(".scan-trigger", row).addEventListener("click", (event) => openScanner(event.currentTarget.dataset.target));
     };
-    form.elements.warehouse_id.addEventListener("change", () => {
-      const warehouseId = Number(form.elements.warehouse_id.value);
-      $$(".line-row", form).forEach((row) => {
-        const select = $('[name="inventory_id"]', row); const selected = select.value;
-        const products = warehouseId ? lookups.products.filter((product) => Number(product.warehouse_id) === warehouseId) : lookups.products;
-        select.innerHTML = optionList(products, "Chọn hàng hóa", selected);
-      });
-    });
     $("#line-add").addEventListener("click", addLine);
     const load = async () => {
       const query = new URLSearchParams(formData($("#receipt-filters")));
@@ -1079,12 +1063,9 @@
     const lookups = await getOperationLookups();
     const form = $("#stocktake-form");
     let currentStocktake = null;
-    form.elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Chọn kho");
     const addLine = () => {
       const index = $$(".stocktake-line").length;
-      const warehouseId = Number(form.elements.warehouse_id.value);
-      const scopedLookups = { ...lookups, products: warehouseId ? lookups.products.filter((item) => Number(item.warehouse_id) === warehouseId) : lookups.products };
-      $("#stocktake-line-body").insertAdjacentHTML("beforeend", stocktakeLine(scopedLookups, index));
+      $("#stocktake-line-body").insertAdjacentHTML("beforeend", stocktakeLine(lookups, index));
       const row = $("#stocktake-line-body tr:last-child");
       $('[name="inventory_id"]', row).addEventListener("change", (event) => {
         const product = lookups.products.find((item) => item.id === Number(event.target.value));
@@ -1093,15 +1074,6 @@
       });
       $(".line-remove", row).addEventListener("click", () => row.remove());
     };
-    form.elements.warehouse_id.addEventListener("change", () => {
-      const warehouseId = Number(form.elements.warehouse_id.value);
-      const products = warehouseId ? lookups.products.filter((item) => Number(item.warehouse_id) === warehouseId) : lookups.products;
-      $$(".stocktake-line", form).forEach((row) => {
-        const select = $('[name="inventory_id"]', row);
-        select.innerHTML = optionList(products, "Chọn hàng hóa", select.value);
-        select.dispatchEvent(new Event("change"));
-      });
-    });
     $("#stocktake-line-add").addEventListener("click", addLine);
     const load = async () => {
       try {
@@ -1211,7 +1183,6 @@
 
   async function initReports() {
     const lookups = await getOperationLookups();
-    $("#report-filters").elements.warehouse_id.innerHTML = optionList(lookups.warehouses, "Tất cả kho");
     $("#report-filters").elements.product_id.innerHTML = optionList(lookups.products, "Tất cả hàng hóa");
     $("#report-filters").elements.customer_id.innerHTML = optionList(lookups.customers, "Tất cả khách hàng");
     const load = async () => {

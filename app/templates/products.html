@@ -10,10 +10,9 @@
   <form class="filter-bar" id="product-filters">
     <label class="search-field"><span class="sr-only">Tìm hàng hóa</span><input name="search" placeholder="Mã SKU, tên hoặc barcode…" autocomplete="off"></label>
     <select name="category_id" aria-label="Danh mục"><option value="">Tất cả danh mục</option></select>
-    <select name="warehouse_id" aria-label="Kho"><option value="">Tất cả kho</option></select>
     <button class="button secondary" type="reset">Đặt lại</button>
   </form>
-  <div class="table-wrap"><table><thead><tr><th>SKU / Barcode</th><th>Tên hàng</th><th>Danh mục</th><th>Đơn vị</th><th>Kho / vị trí</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="product-body"></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th>SKU / Barcode</th><th>Tên hàng</th><th>Danh mục</th><th>Đơn vị</th><th>Kho</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="product-body"></tbody></table></div>
 </section>
 {% endblock %}
 {% block modals %}
@@ -25,9 +24,7 @@
       <div class="form-group"><label for="product-barcode">Barcode</label><div class="input-action"><input id="product-barcode" name="barcode" maxlength="50"><button class="button secondary scan-trigger" type="button" data-target="product-barcode">Quét</button></div><small class="field-error" data-error-for="barcode"></small></div>
       <div class="form-group span-full"><label for="product-name">Tên hàng *</label><input id="product-name" name="name" required maxlength="120"><small class="field-error" data-error-for="name"></small></div>
       <div class="form-group"><label>Danh mục *</label><select name="category_id" required></select><small class="field-error" data-error-for="category_id"></small></div>
-      <div class="form-group"><label>Kho *</label><select name="warehouse_id" required></select><small class="field-error" data-error-for="warehouse_id"></small></div>
-      <div class="form-group"><label>Đơn vị tính *</label><select name="unit_id" required><option value="">Chọn đơn vị tính</option></select><small class="field-error" data-error-for="unit"></small><small class="form-hint">Quản trị viên cấu hình đơn vị tại mục Cấu hình hệ thống.</small></div>
-      <div class="form-group"><label>Vị trí</label><input name="location" placeholder="A-01-01"></div>
+      <div class="form-group"><label>Đơn vị tính *</label><select name="unit_id" required><option value="">Chọn đơn vị tính</option></select><small class="field-error" data-error-for="unit"></small></div>
       <div class="form-group"><label>Ngưỡng cảnh báo</label><input name="min_quantity" type="number" min="0" value="10"></div>
       <div class="form-group"><label>Trạng thái</label><select name="status"><option value="active">Đang hoạt động</option><option value="inactive">Ngừng hoạt động</option></select></div>
       <div class="form-group span-full"><label>Mô tả</label><textarea name="description" rows="2" maxlength="500" placeholder="Quy cách đóng gói hoặc ghi chú nhận diện"></textarea><small class="field-error" data-error-for="description"></small></div>

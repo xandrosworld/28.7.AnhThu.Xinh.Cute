@@ -11,9 +11,10 @@ Repository bàn giao chính thức:
 
 - Đăng nhập, session, mật khẩu băm, CSRF, audit và phân quyền phía server cho
   `ADMIN`, `CS`, `WAREHOUSE`.
-- Quản lý tài khoản, vai trò, đơn vị tính, danh mục, hàng hóa, khách hàng,
-  email hợp đồng, nhà cung cấp và kho; trang `/settings` dành cho ADMIN cho
-  phép cấu hình vai trò/đơn vị và ngừng master đã phát sinh thay vì xóa lịch sử.
+- Vận hành một kho duy nhất tại Đà Nẵng, không chia vị trí kho; kho được gán
+  tự động khi lập hàng hóa, phiếu nhập/xuất và phiếu kiểm kê.
+- Quản lý tài khoản, danh mục và hàng hóa trên giao diện; dữ liệu khách hàng,
+  email hợp đồng và nhà cung cấp vẫn được bảo toàn trong nghiệp vụ nhập/xuất.
 - Phiếu nhập nhiều dòng, container/seal, pallet/barcode/hạn dùng, kiểm nhận
   accepted/rejected bắt buộc trước xác nhận và cập nhật tồn nguyên tử.
 - Phiếu xuất kiểm email hợp đồng, kiểm tồn lại khi xác nhận, picking FEFO/FIFO,

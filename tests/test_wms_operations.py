@@ -219,7 +219,7 @@ def test_master_data_endpoints_create_validate_and_filter(client):
 
     invalid_product = client.post("/api/products", json={}, headers=auth)
     assert invalid_product.status_code == 422
-    assert {"sku", "name", "unit", "category_id", "warehouse_id"} <= set(
+    assert {"sku", "name", "unit", "category_id"} <= set(
         invalid_product.get_json()["errors"]
     )
 
@@ -423,9 +423,9 @@ def test_stocktake_confirmation_is_idempotent(client, manager_login, db):
 
 
 def test_receipt_rejects_malformed_cross_warehouse_and_aggregate_payloads(
-    client, manager_login
+    client, admin_login
 ):
-    _, csrf = manager_login
+    _, csrf = admin_login
     auth_headers = headers(csrf)
 
     assert client.post(
@@ -433,13 +433,29 @@ def test_receipt_rejects_malformed_cross_warehouse_and_aggregate_payloads(
         json={"code": "PN-BAD-LINE", "partner_id": 1, "warehouse_id": 1, "items": ["bad"]},
         headers=auth_headers,
     ).status_code == 422
+    other_warehouse = client.post(
+        "/api/warehouses",
+        json={"code": "QAWH", "name": "Kho kiểm thử", "status": "active"},
+        headers=auth_headers,
+    ).get_json()["id"]
+    other_product = client.post(
+        "/api/products",
+        json={
+            "sku": "SKU-QA-OTHER-WH",
+            "name": "Hàng kho kiểm thử",
+            "category_id": 1,
+            "warehouse_id": other_warehouse,
+            "unit": "Cây",
+        },
+        headers=auth_headers,
+    ).get_json()["id"]
     assert client.post(
         "/api/inbound-receipts",
         json={
             "code": "PN-CROSS-WAREHOUSE",
             "partner_id": 1,
             "warehouse_id": 1,
-            "items": [{"inventory_id": 2, "quantity": 1}],
+            "items": [{"inventory_id": other_product, "quantity": 1}],
         },
         headers=auth_headers,
     ).status_code == 422

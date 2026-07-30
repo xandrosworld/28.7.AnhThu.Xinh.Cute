@@ -3,13 +3,12 @@
 {% block topbar_title %}Quản lý tồn kho{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><span class="eyebrow">QUẢN LÝ KHO</span><h1>Tồn kho hàng hóa</h1><p>Tra cứu số lượng, vị trí và lịch sử kiểm kê theo thời gian thực.</p></div>
+  <div><span class="eyebrow">QUẢN LÝ KHO</span><h1>Tồn kho hàng hóa</h1><p>Tra cứu số lượng và lịch sử kiểm kê theo thời gian thực.</p></div>
 </div>
 <section class="panel">
   <form class="filter-bar" id="inventory-filters">
     <label class="search-field"><span class="sr-only">Tìm kiếm</span><input name="search" placeholder="SKU, tên, barcode, pallet hoặc đơn vị…" autocomplete="off"></label>
     <select name="category_id" aria-label="Lọc danh mục"><option value="">Tất cả danh mục</option></select>
-    <select name="warehouse_id" aria-label="Lọc kho"><option value="">Tất cả kho</option></select>
     <select name="status" aria-label="Lọc trạng thái">
       <option value="">Tất cả trạng thái</option><option value="good">Đủ hàng</option><option value="low">Sắp thiếu</option><option value="out">Hết hàng</option>
     </select>
@@ -17,7 +16,7 @@
   </form>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Hàng hóa</th><th>Danh mục</th><th>Kho / vị trí</th><th class="number">Tồn hiện tại</th><th>Trạng thái</th><th>Cập nhật</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+      <thead><tr><th>Hàng hóa</th><th>Danh mục</th><th>Kho</th><th class="number">Tồn hiện tại</th><th>Trạng thái</th><th>Cập nhật</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
       <tbody id="inventory-body"></tbody>
     </table>
   </div>

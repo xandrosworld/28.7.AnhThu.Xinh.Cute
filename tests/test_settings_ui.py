@@ -17,7 +17,6 @@ def test_admin_settings_page_has_accessible_role_and_unit_controls(
         'aria-labelledby="role-modal-title"',
         'aria-labelledby="unit-modal-title"',
         'aria-live="polite"',
-        'href="/settings"',
         "Cấu hình hệ thống",
     ):
         assert marker in html
@@ -36,6 +35,13 @@ def test_settings_page_is_admin_only_and_link_is_not_shown_to_staff(client):
     forbidden = client.get("/settings")
     assert forbidden.status_code == 403
     assert "Cấu hình hệ thống" not in forbidden.get_data(as_text=True)
+
+
+def test_settings_link_is_hidden_from_admin_sidebar(client, admin_login):
+    dashboard = client.get("/dashboard")
+
+    assert dashboard.status_code == 200
+    assert 'href="/settings"' not in dashboard.get_data(as_text=True)
 
 
 def test_settings_frontend_uses_public_role_and_unit_mutation_contract(client):

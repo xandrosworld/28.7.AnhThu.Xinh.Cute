@@ -45,27 +45,11 @@
           <a class="nav-item {{ 'active' if page == 'categories' }}" href="{{ url_for('views.categories') }}">
             <span aria-hidden="true">◇</span> Danh mục
           </a>
-          <a class="nav-item {{ 'active' if page == 'customers' }}" href="{{ url_for('views.customers') }}">
-            <span aria-hidden="true">♙</span> Khách hàng
-          </a>
-          <a class="nav-item {{ 'active' if page == 'suppliers' }}" href="{{ url_for('views.suppliers') }}">
-            <span aria-hidden="true">♧</span> Nhà cung cấp
-          </a>
         {% endif %}
-        {% if g.user['role'] in ['warehouse','staff'] %}<p class="nav-label">Dữ liệu kho</p>{% endif %}
-        <a class="nav-item {{ 'active' if page == 'warehouses' }}" href="{{ url_for('views.warehouses') }}">
-          <span aria-hidden="true">▣</span> Kho hàng
-        </a>
         {% if g.user['role'] == 'admin' %}
           <p class="nav-label">Quản trị</p>
           <a class="nav-item {{ 'active' if page == 'users' }}" href="{{ url_for('views.users') }}">
             <span aria-hidden="true">♙</span> Người dùng
-          </a>
-          <a class="nav-item {{ 'active' if page == 'settings' }}" href="{{ url_for('views.settings') }}">
-            <span aria-hidden="true">⚙</span> Cấu hình hệ thống
-          </a>
-          <a class="nav-item {{ 'active' if page == 'audit' }}" href="{{ url_for('views.audit_logs') }}">
-            <span aria-hidden="true">≣</span> Nhật ký hệ thống
           </a>
         {% endif %}
       </nav>

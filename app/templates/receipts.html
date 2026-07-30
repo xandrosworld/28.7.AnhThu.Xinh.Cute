@@ -26,7 +26,6 @@
     <div class="form-grid">
       <div class="form-group"><label>Mã phiếu *</label><input name="code" required placeholder="{{ 'PN' if inbound else 'PX' }}-2026-002"><small class="field-error" data-error-for="code"></small></div>
       <div class="form-group"><label>{{ 'Nhà cung cấp' if inbound else 'Khách hàng' }} *</label><select name="partner_id" required><option value="">Chọn đối tác</option></select><small class="field-error" data-error-for="partner_id"></small></div>
-      <div class="form-group"><label>Kho *</label><select name="warehouse_id" required><option value="">Chọn kho</option></select><small class="field-error" data-error-for="warehouse_id"></small></div>
       {% if inbound %}
       <div class="form-group"><label>Số container</label><input name="container_no" maxlength="40"></div>
       <div class="form-group"><label>Số seal</label><input name="seal_no" maxlength="40"></div>
