@@ -29,11 +29,6 @@
         <a class="nav-item {{ 'active' if page == 'inventory' }}" href="{{ url_for('views.inventory') }}">
           <span aria-hidden="true">▦</span> Tồn kho
         </a>
-        {% if g.user['role'] in ['admin','warehouse','staff','manager'] %}
-          <a class="nav-item {{ 'active' if page == 'stocktakes' }}" href="{{ url_for('views.stocktakes') }}">
-            <span aria-hidden="true">✓</span> Kiểm kê
-          </a>
-        {% endif %}
         <a class="nav-item {{ 'active' if page == 'reports' }}" href="{{ url_for('views.reports') }}">
           <span aria-hidden="true">▥</span> Báo cáo
         </a>

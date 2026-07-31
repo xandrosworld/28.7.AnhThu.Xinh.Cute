@@ -112,9 +112,9 @@ test("auth, dashboard and responsive navigation", async ({ page }, testInfo) => 
 
 test("server roles and role-specific navigation", async ({ page }) => {
   const expectations = {
-    admin: { products: 1, stocktakes: 1, users: 1, usersStatus: 200 },
+    admin: { products: 1, stocktakes: 0, users: 1, usersStatus: 200 },
     cs: { products: 1, stocktakes: 0, users: 0, usersStatus: 403 },
-    warehouse: { products: 0, stocktakes: 1, users: 0, usersStatus: 403 },
+    warehouse: { products: 0, stocktakes: 0, users: 0, usersStatus: 403 },
   };
 
   for (const [role, expected] of Object.entries(expectations)) {
@@ -131,6 +131,7 @@ test("server roles and role-specific navigation", async ({ page }) => {
     const response = await page.goto("/users");
     expect(response.status()).toBe(expected.usersStatus);
     await page.goto("/dashboard");
+    await expect(page.locator("#dashboard-stats .stat-card strong")).toHaveCount(6);
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page).toHaveURL(/\/$/);
   }

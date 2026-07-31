@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from conftest import login
 
 
@@ -13,6 +15,7 @@ def test_sidebar_and_profile_match_customer_scope(client, admin_login):
         "/customers",
         "/suppliers",
         "/warehouses",
+        "/stocktakes",
         "/settings",
         "/audit-logs",
     ):
@@ -22,6 +25,68 @@ def test_sidebar_and_profile_match_customer_scope(client, admin_login):
     assert 'id="profile-form"' in profile_html
     assert 'id="password-form"' not in profile_html
     assert "Đổi mật khẩu" not in profile_html
+
+
+@pytest.mark.parametrize(
+    ("username", "password"),
+    (
+        ("admin", "Admin@123"),
+        ("cs", "Cs@123456"),
+        ("warehouse", "Kho@12345"),
+        ("quanlykho", "Kho@12345"),
+        ("nhanvien", "NV@123456"),
+    ),
+)
+def test_latest_customer_scope_is_consistent_for_every_active_account(
+    client, username, password
+):
+    response, _ = login(client, username, password)
+    assert response.status_code == 200
+
+    dashboard_html = client.get("/dashboard").get_data(as_text=True)
+    assert 'href="/stocktakes"' not in dashboard_html
+    assert ">Kiểm kê<" not in dashboard_html
+
+    report_html = client.get("/reports").get_data(as_text=True)
+    assert "Luân chuyển kho" not in report_html
+    assert 'id="movement-chart"' not in report_html
+
+    inventory_html = client.get("/inventory").get_data(as_text=True)
+    assert "KIỂM KÊ" not in inventory_html
+    assert "Kiểm kê định kỳ" not in inventory_html
+    assert "CẬP NHẬT" in inventory_html
+    assert "Cập nhật tồn kho" in inventory_html
+
+    products_html = client.get("/products").get_data(as_text=True)
+    assert "Chưa có barcode" not in products_html
+    assert 'name="barcode"' not in products_html
+    assert 'id="product-barcode"' not in products_html
+    assert "Barcode" not in products_html
+
+
+def test_dynamic_ui_matches_latest_customer_wording(client, admin_login):
+    script = client.get("/static/app.js").get_data(as_text=True)
+    assert ">Cập nhật</button>" in script
+    assert "HÀNG HÓA ĐANG CẬP NHẬT" in script
+    assert ">Kiểm kê</button>" not in script
+    assert "HÀNG HÓA ĐANG KIỂM KÊ" not in script
+    assert "Chưa có barcode" not in script
+    assert "movement-chart" not in script
+
+
+def test_inventory_accepts_updated_reason_wording(client, admin_login):
+    _, csrf = admin_login
+    current = client.get("/api/inventory/1").get_json()["item"]["quantity"]
+    response = client.post(
+        "/api/inventory/1/adjustments",
+        json={
+            "new_quantity": current + 1,
+            "reason": "Cập nhật định kỳ",
+            "note": "",
+        },
+        headers=headers(csrf),
+    )
+    assert response.status_code == 200
 
 
 def test_operational_forms_do_not_ask_for_warehouse_or_location(client, admin_login):

@@ -3,7 +3,7 @@
 {% block topbar_title %}Quản lý tồn kho{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><span class="eyebrow">QUẢN LÝ KHO</span><h1>Tồn kho hàng hóa</h1><p>Tra cứu số lượng và lịch sử kiểm kê theo thời gian thực.</p></div>
+  <div><span class="eyebrow">QUẢN LÝ KHO</span><h1>Tồn kho hàng hóa</h1><p>Tra cứu số lượng và lịch sử cập nhật theo thời gian thực.</p></div>
 </div>
 <section class="panel">
   <form class="filter-bar" id="inventory-filters">
@@ -32,14 +32,14 @@
 </div>
 <div class="modal-backdrop hidden" id="adjust-modal">
   <section class="modal" role="dialog" aria-modal="true" aria-labelledby="adjust-modal-title">
-    <div class="modal-header"><div><span class="eyebrow">KIỂM KÊ</span><h2 id="adjust-modal-title">Điều chỉnh tồn kho</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
+    <div class="modal-header"><div><span class="eyebrow">CẬP NHẬT</span><h2 id="adjust-modal-title">Cập nhật tồn kho</h2></div><button class="icon-button modal-close" type="button" aria-label="Đóng">×</button></div>
     <form id="adjust-form" novalidate>
       <input type="hidden" name="item_id">
       <div class="adjust-summary" id="adjust-summary"></div>
       <div class="form-group"><label for="new-quantity">Số lượng thực tế *</label><input id="new-quantity" name="new_quantity" type="number" min="0" step="1" required><small class="field-error" data-error-for="new_quantity"></small></div>
-      <div class="form-group"><label for="adjust-reason">Lý do *</label><select id="adjust-reason" name="reason" required><option value="">Chọn lý do</option><option>Kiểm kê định kỳ</option><option>Hàng hư hỏng</option><option>Sai lệch chứng từ</option><option>Điều chỉnh khác</option></select><small class="field-error" data-error-for="reason"></small></div>
+      <div class="form-group"><label for="adjust-reason">Lý do *</label><select id="adjust-reason" name="reason" required><option value="">Chọn lý do</option><option>Cập nhật định kỳ</option><option>Hàng hư hỏng</option><option>Sai lệch chứng từ</option><option>Điều chỉnh khác</option></select><small class="field-error" data-error-for="reason"></small></div>
       <div class="form-group"><label for="adjust-note">Ghi chú</label><textarea id="adjust-note" name="note" maxlength="500" rows="3" placeholder="Thông tin bổ sung cho lần điều chỉnh"></textarea><small class="field-error" data-error-for="note"></small></div>
-      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Xác nhận điều chỉnh</button></div>
+      <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Xác nhận cập nhật</button></div>
     </form>
   </section>
 </div>

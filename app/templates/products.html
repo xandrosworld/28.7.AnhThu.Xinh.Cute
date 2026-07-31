@@ -3,16 +3,16 @@
 {% block topbar_title %}Danh mục hàng hóa{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><span class="eyebrow">DỮ LIỆU NỀN</span><h1>Hàng hóa</h1><p>Quản lý mã SKU, barcode, đơn vị và ngưỡng cảnh báo.</p></div>
+  <div><span class="eyebrow">DỮ LIỆU NỀN</span><h1>Hàng hóa</h1><p>Quản lý mã SKU, đơn vị và ngưỡng cảnh báo.</p></div>
   {% if g.user['role'] in ['admin','manager','cs'] %}<button class="button primary" id="product-add" type="button">＋ Thêm hàng hóa</button>{% endif %}
 </div>
 <section class="panel">
   <form class="filter-bar" id="product-filters">
-    <label class="search-field"><span class="sr-only">Tìm hàng hóa</span><input name="search" placeholder="Mã SKU, tên hoặc barcode…" autocomplete="off"></label>
+    <label class="search-field"><span class="sr-only">Tìm hàng hóa</span><input name="search" placeholder="Mã SKU hoặc tên hàng…" autocomplete="off"></label>
     <select name="category_id" aria-label="Danh mục"><option value="">Tất cả danh mục</option></select>
     <button class="button secondary" type="reset">Đặt lại</button>
   </form>
-  <div class="table-wrap"><table><thead><tr><th>SKU / Barcode</th><th>Tên hàng</th><th>Danh mục</th><th>Đơn vị</th><th>Kho</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="product-body"></tbody></table></div>
+  <div class="table-wrap"><table><thead><tr><th>SKU</th><th>Tên hàng</th><th>Danh mục</th><th>Đơn vị</th><th>Kho</th><th>Trạng thái</th><th><span class="sr-only">Thao tác</span></th></tr></thead><tbody id="product-body"></tbody></table></div>
 </section>
 {% endblock %}
 {% block modals %}
@@ -21,7 +21,6 @@
   <form id="product-form" novalidate><input type="hidden" name="id">
     <div class="form-grid">
       <div class="form-group"><label for="product-sku">Mã SKU *</label><input id="product-sku" name="sku" required maxlength="30"><small class="field-error" data-error-for="sku"></small></div>
-      <div class="form-group"><label for="product-barcode">Barcode</label><div class="input-action"><input id="product-barcode" name="barcode" maxlength="50"><button class="button secondary scan-trigger" type="button" data-target="product-barcode">Quét</button></div><small class="field-error" data-error-for="barcode"></small></div>
       <div class="form-group span-full"><label for="product-name">Tên hàng *</label><input id="product-name" name="name" required maxlength="120"><small class="field-error" data-error-for="name"></small></div>
       <div class="form-group"><label>Danh mục *</label><select name="category_id" required></select><small class="field-error" data-error-for="category_id"></small></div>
       <div class="form-group"><label>Đơn vị tính *</label><select name="unit_id" required><option value="">Chọn đơn vị tính</option></select><small class="field-error" data-error-for="unit"></small></div>
@@ -32,5 +31,4 @@
     <div class="modal-actions"><button class="button secondary modal-close" type="button">Hủy</button><button class="button primary" type="submit">Lưu hàng hóa</button></div>
   </form>
 </section></div>
-{% include "_scanner.html" %}
 {% endblock %}

@@ -634,7 +634,13 @@ def adjust_inventory(item_id):
     errors = {}
     if new_quantity is None or new_quantity < 0:
         errors["new_quantity"] = "Số lượng thực tế phải là số nguyên không âm."
-    if reason not in {"Kiểm kê định kỳ", "Hàng hư hỏng", "Sai lệch chứng từ", "Điều chỉnh khác"}:
+    if reason not in {
+        "Cập nhật định kỳ",
+        "Kiểm kê định kỳ",
+        "Hàng hư hỏng",
+        "Sai lệch chứng từ",
+        "Điều chỉnh khác",
+    }:
         errors["reason"] = "Vui lòng chọn lý do hợp lệ."
     if reason == "Điều chỉnh khác" and len(note) < 5:
         errors["note"] = "Vui lòng mô tả lý do điều chỉnh (tối thiểu 5 ký tự)."

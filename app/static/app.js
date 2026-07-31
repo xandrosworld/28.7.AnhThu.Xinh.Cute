@@ -332,7 +332,7 @@
           <td class="number"><b>${formatNumber(item.quantity)}</b> ${escapeHtml(item.unit)}${item.available_quantity != null ? `<span class="cell-subtitle">Khả dụng: ${formatNumber(item.available_quantity)}</span>` : ""}</td>
           <td>${statusBadge(item)}</td>
           <td>${formatDateTime(item.updated_at)}</td>
-          <td><div class="table-actions"><button class="action-button detail-button" data-id="${item.id}" type="button">Chi tiết</button>${["admin", "manager", "warehouse"].includes(role) ? `<button class="action-button adjust-button" data-id="${item.id}" type="button">Kiểm kê</button>` : ""}</div></td>
+          <td><div class="table-actions"><button class="action-button detail-button" data-id="${item.id}" type="button">Chi tiết</button>${["admin", "manager", "warehouse"].includes(role) ? `<button class="action-button adjust-button" data-id="${item.id}" type="button">Cập nhật</button>` : ""}</div></td>
         </tr>`).join("") : '<tr><td colspan="7"><div class="empty-state">Không tìm thấy hàng hóa phù hợp.</div></td></tr>';
       const start = data.pagination.total ? (data.pagination.page - 1) * data.pagination.per_page + 1 : 0;
       const end = Math.min(data.pagination.page * data.pagination.per_page, data.pagination.total);
@@ -408,7 +408,7 @@
     clearErrors(form);
     form.elements.item_id.value = item.id;
     form.elements.new_quantity.value = item.quantity;
-    $("#adjust-summary").innerHTML = `<small>HÀNG HÓA ĐANG KIỂM KÊ</small><strong>${escapeHtml(item.sku)} · ${escapeHtml(item.name)}</strong><span>Hiện có ${formatNumber(item.quantity)} ${escapeHtml(item.unit)} tại ${escapeHtml(item.warehouse_name)}</span>`;
+    $("#adjust-summary").innerHTML = `<small>HÀNG HÓA ĐANG CẬP NHẬT</small><strong>${escapeHtml(item.sku)} · ${escapeHtml(item.name)}</strong><span>Hiện có ${formatNumber(item.quantity)} ${escapeHtml(item.unit)} tại ${escapeHtml(item.warehouse_name)}</span>`;
     openModal($("#adjust-modal"));
   }
 
@@ -678,7 +678,7 @@
         const data = await api(`/api/products?${query}`);
         state.products = data.items;
         body.innerHTML = data.items.length ? data.items.map((item) => `<tr>
-          <td><span class="sku">${escapeHtml(item.sku)}</span><span class="cell-subtitle">${escapeHtml(item.barcode || "Chưa có barcode")}</span></td>
+          <td><span class="sku">${escapeHtml(item.sku)}</span></td>
           <td><span class="cell-title">${escapeHtml(item.name)}</span></td><td>${escapeHtml(item.category_name)}</td>
           <td>${escapeHtml(item.unit)}</td><td><span class="cell-title">${escapeHtml(item.warehouse_name)}</span></td>
           <td><span class="badge ${item.status}">${statusLabel(item.status)}</span></td>
@@ -727,7 +727,6 @@
       } catch (error) { showErrors(form, error.errors); toast(error.message, "error"); }
       finally { setButtonBusy(button, false); }
     });
-    initScanner();
     await load();
   }
 
@@ -1199,8 +1198,6 @@
           ["amber", "Cảnh báo", data.summary.alerts], ["purple", "Phiếu hoàn tất", (data.receipt_counts.inbound || 0) + (data.receipt_counts.outbound || 0)],
         ];
         $("#report-stats").innerHTML = cards.map(([tone, label, value]) => `<article class="stat-card ${tone}"><small>${label}</small><strong>${formatNumber(value)}</strong><span class="cell-subtitle">Theo dữ liệu hiện tại</span></article>`).join("");
-        const max = Math.max(...data.movement_totals.map((item) => item.quantity), 1);
-        $("#movement-chart").innerHTML = data.movement_totals.length ? data.movement_totals.map((item) => `<div class="bar-row"><span class="bar-label">${escapeHtml(statusLabel(item.movement_type))}</span><span class="bar-track"><span class="bar-fill" style="width:${item.quantity / max * 100}%"></span></span><span class="bar-value">${formatNumber(item.quantity)}</span></div>`).join("") : '<div class="empty-state">Chưa có giao dịch hoàn tất.</div>';
         $("#stock-alerts").innerHTML = data.alerts.length ? data.alerts.map((item) => `<div class="alert-row"><span><b>${escapeHtml(item.sku)}</b><small>${escapeHtml(item.name)}</small></span><strong>${formatNumber(item.quantity)} / ${formatNumber(item.min_quantity)} ${escapeHtml(item.unit)}</strong></div>`).join("") : '<div class="empty-state compact">Không có cảnh báo.</div>';
         $("#movement-body").innerHTML = data.movements.length ? data.movements.map((item) => `<tr><td>${formatDateTime(item.created_at)}</td><td><span class="sku">${escapeHtml(item.reference_code)}</span></td><td>${escapeHtml(item.sku)} · ${escapeHtml(item.name)}</td><td><span class="badge info">${escapeHtml(item.movement_type)}</span></td><td class="number"><b>${item.quantity_change > 0 ? "+" : ""}${formatNumber(item.quantity_change)}</b></td><td class="number">${formatNumber(item.balance_after)}</td></tr>`).join("") : '<tr><td colspan="6"><div class="empty-state">Chưa có biến động tồn kho.</div></td></tr>';
       } catch (error) { toast(error.message, "error"); }
